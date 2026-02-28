@@ -155,9 +155,9 @@ function ang(A,B,C){
 
 function getState(lms){
   if(!lms||lms.length<33)return null
-  const l=ang(lms[23],lms[25],lms[27]),r=ang(lms[24],lms[26],lms[28])
-  if(Math.max(l,r)>AU&&Math.min(l,r)>AU)return"UP"
-  if(Math.min(l,r)<AD)return"DOWN"
+  const l=ang(lms[23],lms[25],lms[27])
+  if(l>AU)return"UP"
+  if(l<AD)return"DOWN"
   return"MID"
 }
 
@@ -193,8 +193,8 @@ function frame(){
     const lms=r&&r.landmarks&&r.landmarks[0]
     draw(r?r.landmarks:[])
     if(lms){
-      const l=ang(lms[23],lms[25],lms[27]),r2=ang(lms[24],lms[26],lms[28])
-      angleVal.textContent=((l+r2)/2).toFixed(1)+"°"
+      const l=ang(lms[23],lms[25],lms[27])
+      angleVal.textContent=l.toFixed(1)+"°"
       const s=getState(lms)
       updateState(s||"MID")
       if(s==="DOWN"&&poseState==="UP"){poseState="DOWN";pending=true}
