@@ -20,7 +20,6 @@ button{font-family:inherit;cursor:pointer}
 .tip span{font-size:12px;color:#888;line-height:18px;flex:1}
 .tip button{background:none;border:none;color:#555;font-size:16px;padding-left:10px}
 .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
-.logo{display:flex;align-items:center;gap:10px}
 .app-title{font-size:16px;font-weight:bold;letter-spacing:3px;color:#00FF96}
 .app-sub{font-size:10px;letter-spacing:1.5px;color:#555;margin-top:2px}
 .pill{font-size:11px;background:rgba(0,255,150,0.08);border:1px solid rgba(0,255,150,0.2);border-radius:20px;padding:5px 11px;color:#00FF96}
@@ -41,19 +40,21 @@ button{font-family:inherit;cursor:pointer}
 .rep-label{font-size:10px;letter-spacing:3px;color:#00FF96;margin-bottom:6px;opacity:0.8}
 .rep-num{font-size:64px;font-weight:bold;color:#00FF96;line-height:1;text-shadow:0 0 30px rgba(0,255,150,0.4)}
 .rep-sub{font-size:11px;color:#444;letter-spacing:2px;margin-top:4px}
-.state-card{flex:1;background:#10101A;border:1px solid #1E1E30;border-radius:12px;padding:14px;display:flex;flex-direction:column;justify-content:center}
-.card-label{font-size:10px;letter-spacing:2.5px;color:#555;margin-bottom:8px}
-.state-badge{font-size:20px;font-weight:bold;margin-bottom:4px}
+.state-card{flex:1;background:#10101A;border:1px solid #1E1E30;border-radius:12px;padding:14px}
+.card-label{font-size:10px;letter-spacing:2.5px;color:#555;margin-bottom:6px}
+.state-badge{font-size:22px;font-weight:bold;margin-bottom:4px}
 .card-hint{font-size:10px;color:#333;line-height:15px}
-.metrics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}
-.metric{background:#10101A;border:1px solid #1E1E30;border-radius:10px;padding:10px;text-align:center}
-.metric-label{font-size:9px;letter-spacing:1.5px;color:#555;margin-bottom:4px}
-.metric-val{font-size:16px;font-weight:bold;color:#FFD700}
+.meter-box{background:#10101A;border:1px solid #1E1E30;border-radius:12px;padding:14px;margin-bottom:12px}
+.meter-label{font-size:10px;letter-spacing:2px;color:#555;margin-bottom:8px;display:flex;justify-content:space-between}
+.meter-track{height:12px;background:#0C0C14;border-radius:6px;overflow:hidden;position:relative;margin-bottom:6px}
+.meter-fill{height:100%;border-radius:6px;transition:width 0.08s linear}
+.meter-marks{position:relative;height:16px}
+.mark{position:absolute;font-size:9px;color:#444;transform:translateX(-50%)}
+.mark-line{position:absolute;top:-18px;width:1px;height:10px;background:#2A2A3A}
+.meter-val{font-size:20px;font-weight:bold;text-align:center;letter-spacing:1px}
 .info{background:#0C0C14;border:1px solid #1A1A28;border-radius:12px;padding:16px;margin-bottom:12px}
 .info-title{font-size:10px;letter-spacing:3px;color:#444;margin-bottom:10px}
-.step-row{display:flex;align-items:flex-start;gap:10px;margin-bottom:8px}
-.step-num{font-size:11px;color:#00FF96;min-width:18px;font-weight:bold;margin-top:1px}
-.step-txt{font-size:12px;color:#555;line-height:18px}
+.info-body{font-size:12px;color:#555;line-height:20px}
 .reset-btn{width:100%;padding:12px 0;background:transparent;border:1px solid #2A2A3A;border-radius:10px;color:#555;font-size:12px;letter-spacing:2px;margin-bottom:8px;display:none}
 .spacer{height:32px}
 </style>
@@ -61,15 +62,13 @@ button{font-family:inherit;cursor:pointer}
 <body>
 <div id="app">
   <div class="glow"></div>
-
   <div class="tip" id="tip">
     <span>📲 Safari: tap Share then "Add to Home Screen" to install as app</span>
     <button onclick="document.getElementById('tip').remove()">✕</button>
   </div>
-
   <div class="header">
-    <div class="logo">
-      <span style="font-size:28px;margin-right:10px">⬆</span>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="font-size:28px">⬆</span>
       <div>
         <div class="app-title">STEP-UP COUNTER</div>
         <div class="app-sub">AI Rep Tracker · MediaPipe Pose</div>
@@ -102,34 +101,31 @@ button{font-family:inherit;cursor:pointer}
     </div>
     <div class="state-card">
       <div class="card-label">STATE</div>
-      <div class="state-badge" id="stateVal" style="color:#555">READY</div>
+      <div class="state-badge" id="stateVal" style="color:#555">LOW</div>
       <div class="card-hint" id="stateHint">Waiting for video...</div>
     </div>
   </div>
 
-  <!-- Live metrics -->
+  <!-- Ankle average meter -->
 
-  <div class="metrics">
-    <div class="metric">
-      <div class="metric-label">L.ANKLE Y</div>
-      <div class="metric-val" id="lAnkleY">--</div>
+  <div class="meter-box">
+    <div class="meter-label">
+      <span>AVG ANKLE LEVEL</span>
+      <span id="meterVal" style="color:#FFD700">--</span>
     </div>
-    <div class="metric">
-      <div class="metric-label">HIP Y</div>
-      <div class="metric-val" id="hipY">--</div>
+    <div class="meter-track">
+      <div class="meter-fill" id="meterFill" style="width:50%;background:#555"></div>
     </div>
-    <div class="metric">
-      <div class="metric-label">R.ANKLE Y</div>
-      <div class="metric-val" id="rAnkleY">--</div>
+    <div class="meter-marks">
+      <div class="mark" style="left:20%"><div class="mark-line"></div>LOW</div>
+      <div class="mark" style="left:50%"><div class="mark-line"></div>BASE</div>
+      <div class="mark" style="left:80%"><div class="mark-line"></div>HIGH</div>
     </div>
   </div>
 
   <div class="info">
-    <div class="info-title">COUNTING LOGIC</div>
-    <div class="step-row"><span class="step-num">1</span><span class="step-txt">Both ankles at hip level → READY</span></div>
-    <div class="step-row"><span class="step-num">2</span><span class="step-txt">One ankle rises above hip → LIFT</span></div>
-    <div class="step-row"><span class="step-num">3</span><span class="step-txt">Hip Y also rises (body up) → RISE</span></div>
-    <div class="step-row"><span class="step-num">4</span><span class="step-txt">Second ankle levels with first → COUNT +1 → READY</span></div>
+    <div class="info-title">LOGIC</div>
+    <div class="info-body">Avg ankle Y: LOW baseline → rises to HIGH (on step) → drops back to LOW = +1 rep. Simple, robust, no knee tracking needed.</div>
   </div>
 
 <button class="reset-btn" id="resetBtn" onclick="resetAll()">↺  Reset Counter</button>
@@ -141,10 +137,12 @@ button{font-family:inherit;cursor:pointer}
 const CDN = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14"
 const MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
 
-// Tuning thresholds (all in normalised 0-1 coords)
-const ANKLE_LIFT_THRESH  = 0.05   // ankle must be this much ABOVE hip to count as lifted
-const HIP_RISE_THRESH    = 0.03   // hip must rise this much from baseline to confirm body weight shifted
-const ANKLE_LEVEL_THRESH = 0.04   // second ankle within this Y distance of first = both on step
+// ── Thresholds ────────────────────────────────────────────────
+// MediaPipe Y: 0=top, 1=bottom. Ankles rise = Y gets SMALLER.
+// We track avgAnkle - baseline. Negative = ankles higher than baseline.
+const HIGH_THRESH = -0.06   // ankles 6% above baseline = ON STEP
+const LOW_THRESH  = -0.02   // ankles within 2% of baseline = ON GROUND
+const SMOOTH      = 0.2     // smoothing factor (0=none, 1=instant)
 
 const vid=document.getElementById("vid")
 const cv=document.getElementById("cv")
@@ -157,56 +155,61 @@ const doneBanner=document.getElementById("doneBanner")
 const chooseBtn=document.getElementById("chooseBtn")
 const resetBtn=document.getElementById("resetBtn")
 const empty=document.getElementById("empty")
-const lAnkleYEl=document.getElementById("lAnkleY")
-const hipYEl=document.getElementById("hipY")
-const rAnkleYEl=document.getElementById("rAnkleY")
+const meterFill=document.getElementById("meterFill")
+const meterVal=document.getElementById("meterVal")
 
 let lmk=null, raf=null, lastT=-1, count=0
-let state="READY"
-let baselineHipY=null      // hip Y when standing on ground (calibrated)
-let liftedAnkleY=null      // Y of the ankle that first lifted
-
-// State colours
-const SC={READY:"#888",LIFT:"#FFD700",RISE:"#FF6B6B",READY_COUNT:"#00FF96"}
-
-function setState(s, hint){
-  state=s
-  stateVal.textContent=s
-  stateVal.style.color=SC[s]||"#888"
-  stateHint.textContent=hint
-}
-
-// Average of left+right hip Y
-function hipY(lms){ return (lms[23].y + lms[24].y) / 2 }
-
-// ankle Y relative to hip — negative means ankle is ABOVE hip (lifted)
-function ankleRelY(ankleY, hipY){ return ankleY - hipY }  // negative = above hip
+let state="LOW"          // LOW | HIGH
+let smoothedAnkle=null   // smoothed avg ankle Y
+let baseline=null        // ankle Y when standing on ground
 
 const BONES=[[23,25],[25,27],[24,26],[26,28],[23,24]]
 const KP=[23,24,25,26,27,28]
 
-function draw(sets, lRel, rRel){
+function draw(sets, delta){
   if(!vid.videoWidth)return
   cv.width=vid.videoWidth;cv.height=vid.videoHeight
   const ctx=cv.getContext("2d");ctx.clearRect(0,0,cv.width,cv.height)
   if(!sets||!sets.length)return
   const lms=sets[0],W=cv.width,H=cv.height
+  // Bone color reflects state
+  const boneCol = state==="HIGH"?"rgba(0,255,150,0.9)":"rgba(255,215,0,0.7)"
   ctx.lineWidth=3
-  // Left leg yellow, right leg orange
   for(const[a,b]of BONES){
     if(!lms[a]||!lms[b])continue
-    const isLeft=(a===23||a===25||a===27)
-    ctx.strokeStyle=isLeft?"rgba(255,215,0,0.85)":"rgba(255,107,107,0.85)"
+    ctx.strokeStyle=boneCol
     ctx.beginPath();ctx.moveTo(lms[a].x*W,lms[a].y*H);ctx.lineTo(lms[b].x*W,lms[b].y*H);ctx.stroke()
   }
   for(const i of KP){
     if(!lms[i])continue
     ctx.beginPath();ctx.arc(lms[i].x*W,lms[i].y*H,7,0,Math.PI*2)
-    // Ankles glow green when lifted
-    if(i===27) ctx.fillStyle=lRel<-ANKLE_LIFT_THRESH?"#00FF96":"#FFD700"
-    else if(i===28) ctx.fillStyle=rRel<-ANKLE_LIFT_THRESH?"#00FF96":"#FF6B6B"
-    else ctx.fillStyle=i<=24?"#FF6B6B":"#FFD700"
+    // Ankles glow green when elevated
+    ctx.fillStyle=(i===27||i===28)?(delta<HIGH_THRESH?"#00FF96":"#FFD700"):"#FF6B6B"
     ctx.fill()
+  }
+}
+
+function updateMeter(delta){
+  // delta is negative when elevated. Map to 0-100% meter.
+  // baseline=50%, fully HIGH=80%, fully LOW=20%
+  const pct = 50 + (-delta / 0.15) * 30
+  const clamped = Math.min(95, Math.max(5, pct))
+  meterFill.style.width = clamped+"%"
+  meterFill.style.background = state==="HIGH"?"#00FF96":delta<LOW_THRESH?"#FFD700":"#555"
+  meterVal.textContent = (delta*100).toFixed(1)+"%"
+  meterVal.style.color = state==="HIGH"?"#00FF96":"#FFD700"
+}
+
+function setUIState(s){
+  state=s
+  if(s==="HIGH"){
+    stateVal.textContent="HIGH"
+    stateVal.style.color="#00FF96"
+    stateHint.textContent="On step — come back down for +1"
+  } else {
+    stateVal.textContent="LOW"
+    stateVal.style.color="#FFD700"
+    stateHint.textContent="On ground — step up to count"
   }
 }
 
@@ -220,66 +223,32 @@ function frame(){
     const lms=r&&r.landmarks&&r.landmarks[0]
     if(!lms){raf=requestAnimationFrame(frame);return}
 
-    const hY  = hipY(lms)
-    const lAY = lms[27].y   // left ankle Y
-    const rAY = lms[28].y   // right ankle Y
-    const lRel = ankleRelY(lAY, hY)  // negative = left ankle above hip
-    const rRel = ankleRelY(rAY, hY)  // negative = right ankle above hip
+    // Average of both ankles Y
+    const avgAnkle = (lms[27].y + lms[28].y) / 2
 
-    draw(r.landmarks, lRel, rRel)
+    // Smooth the signal
+    if(smoothedAnkle===null) smoothedAnkle=avgAnkle
+    smoothedAnkle = smoothedAnkle*(1-SMOOTH) + avgAnkle*SMOOTH
 
-    // Update metric display (show as % for readability)
-    lAnkleYEl.textContent=(lRel*100).toFixed(1)+"%"
-    hipYEl.textContent=hY.toFixed(2)
-    rAnkleYEl.textContent=(rRel*100).toFixed(1)+"%"
+    // Calibrate baseline from first frames (LOW state only)
+    if(baseline===null) baseline=smoothedAnkle
+    if(state==="LOW") baseline = baseline*0.98 + smoothedAnkle*0.02
 
-    // Calibrate baseline hip Y from first few frames
-    if(baselineHipY===null) baselineHipY=hY
+    // Delta: negative = ankles ABOVE baseline = elevated = ON STEP
+    const delta = smoothedAnkle - baseline
 
-    const hipRise = baselineHipY - hY  // positive = hip has risen (Y decreased)
+    draw(r.landmarks, delta)
+    updateMeter(delta)
 
-    // ── State machine (your pseudocode) ──────────────────────────
-    if(state==="READY"){
-      // Both ankles near hip level = feet on ground
-      const bothLevel = Math.abs(lRel)<0.08 && Math.abs(rRel)<0.08
-      if(bothLevel) baselineHipY=hY*0.05 + baselineHipY*0.95  // slow recalibrate
-
-      // One ankle lifts above hip
-      const leftLifted  = lRel < -ANKLE_LIFT_THRESH
-      const rightLifted = rRel < -ANKLE_LIFT_THRESH
-      if(leftLifted || rightLifted){
-        liftedAnkleY = leftLifted ? lAY : rAY
-        setState("LIFT", leftLifted?"Left foot on step — shift weight up":"Right foot on step — shift weight up")
-      }
+    // ── Core logic: LOW → HIGH → LOW = +1 rep ──────────────────
+    if(state==="LOW" && delta < HIGH_THRESH){
+      setUIState("HIGH")
     }
-
-    else if(state==="LIFT"){
-      // Hip rises = body weight shifted onto the step
-      if(hipRise > HIP_RISE_THRESH){
-        setState("RISE","Body rising — bring second foot up")
-      }
-      // If foot came back down, cancel
-      const leftLifted  = lRel < -ANKLE_LIFT_THRESH
-      const rightLifted = rRel < -ANKLE_LIFT_THRESH
-      if(!leftLifted && !rightLifted){
-        setState("READY","Ready — step one foot up")
-      }
-    }
-
-    else if(state==="RISE"){
-      // Second ankle levels with first (both ankles at similar Y = both on step)
-      const ankleDiff = Math.abs(lAY - rAY)
-      if(ankleDiff < ANKLE_LEVEL_THRESH){
-        count++
-        repNum.textContent=count
-        resetBtn.style.display="block"
-        setState("READY","Ready — step one foot up")
-        baselineHipY=hY  // recalibrate baseline from new standing position
-      }
-      // If hip drops back down without second foot joining, go back
-      if(hipRise < 0){
-        setState("READY","Ready — step one foot up")
-      }
+    else if(state==="HIGH" && delta > LOW_THRESH){
+      count++
+      repNum.textContent=count
+      resetBtn.style.display="block"
+      setUIState("LOW")
     }
 
   }catch(e){}
@@ -296,10 +265,12 @@ function onEnded(){
 
 window.resetAll=function(){
   cancelAnimationFrame(raf)
-  count=0;lastT=-1;state="READY";baselineHipY=null;liftedAnkleY=null
+  count=0;lastT=-1;state="LOW";smoothedAnkle=null;baseline=null
   repNum.textContent="0"
-  setState("READY","Waiting for video...")
-  lAnkleYEl.textContent="--";hipYEl.textContent="--";rAnkleYEl.textContent="--"
+  setUIState("LOW")
+  stateHint.textContent="Waiting for video..."
+  meterFill.style.width="50%"
+  meterVal.textContent="--"
   doneBanner.style.display="none"
   resetBtn.style.display="none"
   vid.currentTime=0;vid.pause()
@@ -309,10 +280,12 @@ window.resetAll=function(){
 document.getElementById("fileIn").addEventListener("change",function(e){
   const f=e.target.files&&e.target.files[0];if(!f)return
   cancelAnimationFrame(raf)
-  count=0;lastT=-1;state="READY";baselineHipY=null;liftedAnkleY=null
+  count=0;lastT=-1;state="LOW";smoothedAnkle=null;baseline=null
   repNum.textContent="0"
-  setState("READY","Waiting for video...")
-  lAnkleYEl.textContent="--";hipYEl.textContent="--";rAnkleYEl.textContent="--"
+  setUIState("LOW")
+  stateHint.textContent="Waiting for video..."
+  meterFill.style.width="50%"
+  meterVal.textContent="--"
   doneBanner.style.display="none"
   resetBtn.style.display="none"
   empty.style.display="none"
