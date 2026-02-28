@@ -147,21 +147,21 @@ let signal=[]   // {t, y} per frame — raw smoothed left ankle Y
 // ── Spike detection (post-processing) ─────────────────────────
 // In MediaPipe Y coords: ankle ON STEP = smaller Y = dip in signal
 // So we find local MINIMA (dips) that are deep enough and far enough apart
-function detectSpikes(signal, minDrop=0.03, minGapFrames=15){
+function detectSpikes(signal, minGapFrames=30){
   if(signal.length<10) return []
 
   const vals = signal.map(s=>s.y)
 
-  // Smooth again with wider window for cleaner peak detection
+  // Smooth with wider window for cleaner peak detection
   const w = []
-  const WIN = 8
+  const WIN = 10
   for(let i=0;i<vals.length;i++){
     let sum=0,cnt=0
     for(let j=Math.max(0,i-WIN);j<=Math.min(vals.length-1,i+WIN);j++){sum+=vals[j];cnt++}
     w.push(sum/cnt)
   }
 
-  // Find local minima
+  // Find ALL local minima (every dip, no threshold)
   const minima=[]
   for(let i=1;i<w.length-1;i++){
     if(w[i]<w[i-1] && w[i]<w[i+1]){
@@ -171,24 +171,20 @@ function detectSpikes(signal, minDrop=0.03, minGapFrames=15){
 
   if(!minima.length) return []
 
-  // Dynamic threshold: mean - minDrop*range
-  const mean = vals.reduce((a,b)=>a+b,0)/vals.length
-  const range = Math.max(...vals) - Math.min(...vals)
-  const thresh = mean - minDrop * (range/0.05) * 0.01
-  // Simpler: just use mean minus fraction of range
-  const dynThresh = mean - range * 0.25
-
-  // Keep only minima below threshold
-  const deep = minima.filter(m => m.y < dynThresh)
-
-  // Enforce minimum gap between spikes (avoid double-counting)
+  // Only enforce minimum gap — pick the deepest minimum in each window
   const spikes=[]
-  let lastIdx=-minGapFrames
-  for(const m of deep){
-    if(m.i - lastIdx >= minGapFrames){
-      spikes.push(m)
-      lastIdx=m.i
+  let i=0
+  while(i<minima.length){
+    // Collect all minima within the gap window
+    const group=[minima[i]]
+    let j=i+1
+    while(j<minima.length && minima[j].i - minima[i].i < minGapFrames){
+      group.push(minima[j]); j++
     }
+    // Pick the deepest one in this group (smallest Y = highest on screen = most elevated)
+    const best=group.reduce((a,b)=>a.y<b.y?a:b)
+    spikes.push(best)
+    i=j
   }
 
   return spikes
@@ -225,16 +221,7 @@ function drawGraph(spikes){
     ctx.fillText(val.toFixed(3),pad.l-3,y+3)
   }
 
-  // Dynamic threshold line
-  const range=maxV-minV
-  const mean=vals.reduce((a,b)=>a+b,0)/vals.length
-  const dynThresh=mean-range*0.25
-  const ty=py(dynThresh)
-  ctx.strokeStyle="rgba(255,215,0,0.5)"; ctx.lineWidth=1; ctx.setLineDash([4,4])
-  ctx.beginPath();ctx.moveTo(pad.l,ty);ctx.lineTo(pad.l+iW,ty);ctx.stroke()
-  ctx.setLineDash([])
-  ctx.fillStyle="#FFD700";ctx.font="9px Courier New";ctx.textAlign="left"
-  ctx.fillText("threshold",pad.l+3,ty-3)
+  // No fixed threshold — all local minima are counted
 
   // Signal line
   ctx.strokeStyle="#00FF96"; ctx.lineWidth=2
