@@ -148,88 +148,44 @@ let signal=[]   // {t, y} per frame — raw smoothed left ankle Y
 // ── Spike detection (post-processing) ─────────────────────────
 // In MediaPipe Y coords: ankle ON STEP = smaller Y = dip in signal
 // So we find local MINIMA (dips) that are deep enough and far enough apart
-function detectSpikes(signal){
+function detectSpikes(signal, minGapFrames=30){
   if(signal.length<10) return []
 
   const vals = signal.map(s=>s.y)
-  const N = vals.length
 
-  // ── Step 1: Light smooth to remove frame noise ──────────────
-  const WIN = 8
+  // Smooth with window to remove frame noise
   const w = []
-  for(let i=0;i<N;i++){
+  const WIN = 10
+  for(let i=0;i<vals.length;i++){
     let sum=0,cnt=0
-    for(let j=Math.max(0,i-WIN);j<=Math.min(N-1,i+WIN);j++){sum+=vals[j];cnt++}
+    for(let j=Math.max(0,i-WIN);j<=Math.min(vals.length-1,i+WIN);j++){sum+=vals[j];cnt++}
     w.push(sum/cnt)
   }
 
-  // ── Step 2: Build lower envelope ────────────────────────────
-  // Lower envelope = slowly tracks the minimum of the signal
-  // Uses exponential decay - fast to drop, slow to rise
-  // This adapts to drift (person moving closer/further)
-  const DECAY_DOWN = 0.05   // fast to follow signal down
-  const DECAY_UP   = 0.002  // very slow to rise back up
-  const lower = new Array(N)
-  lower[0] = w[0]
-  for(let i=1;i<N;i++){
-    if(w[i] < lower[i-1]){
-      lower[i] = lower[i-1] * (1-DECAY_DOWN) + w[i] * DECAY_DOWN
-    } else {
-      lower[i] = lower[i-1] * (1-DECAY_UP) + w[i] * DECAY_UP
+  // Find ALL local minima
+  const minima=[]
+  for(let i=1;i<w.length-1;i++){
+    if(w[i]<w[i-1] && w[i]<w[i+1]){
+      minima.push({i, y:w[i]})
     }
   }
+  if(!minima.length) return {spikes:[], w}
 
-  // ── Step 3: Build upper envelope ────────────────────────────
-  const upper = new Array(N)
-  upper[0] = w[0]
-  for(let i=1;i<N;i++){
-    if(w[i] > upper[i-1]){
-      upper[i] = upper[i-1] * (1-DECAY_DOWN) + w[i] * DECAY_DOWN
-    } else {
-      upper[i] = upper[i-1] * (1-DECAY_UP) + w[i] * DECAY_UP
+  // Group minima by gap and pick deepest in each group
+  const spikes=[]
+  let i=0
+  while(i<minima.length){
+    const group=[minima[i]]
+    let j=i+1
+    while(j<minima.length && minima[j].i - minima[i].i < minGapFrames){
+      group.push(minima[j]); j++
     }
+    const best=group.reduce((a,b)=>a.y<b.y?a:b)
+    spikes.push(best)
+    i=j
   }
 
-  // ── Step 4: Normalise signal between envelopes ───────────────
-  // Each point: 0 = at lower envelope, 1 = at upper envelope
-  const norm = w.map((v,i)=>{
-    const range = upper[i] - lower[i]
-    if(range < 0.001) return 0.5
-    return (v - lower[i]) / range
-  })
-
-  // ── Step 5: Find valleys in normalised signal ────────────────
-  // A valley = signal dips below 0.3 (30% of local range)
-  // then recovers above 0.5
-  // This is purely local so drift doesn't matter
-  const VALLEY_ENTER = 0.35   // signal below this = in a valley
-  const VALLEY_EXIT  = 0.55   // signal above this = valley ended
-
-  const spikes = []
-  let inValley = false
-  let valleyStart = -1
-  let valleyMin = Infinity
-  let valleyMinIdx = -1
-
-  for(let i=0;i<N;i++){
-    if(!inValley && norm[i] < VALLEY_ENTER){
-      inValley = true
-      valleyStart = i
-      valleyMin = w[i]
-      valleyMinIdx = i
-    }
-    if(inValley){
-      if(w[i] < valleyMin){ valleyMin=w[i]; valleyMinIdx=i }
-      if(norm[i] > VALLEY_EXIT){
-        // Valley ended — record the deepest point
-        spikes.push({ i: valleyMinIdx, y: valleyMin })
-        inValley = false
-        valleyMin = Infinity
-      }
-    }
-  }
-
-  return { spikes, lower, upper, norm, w }
+  return {spikes, w}
 }
 
 // ── Draw graph ────────────────────────────────────────────────
@@ -371,7 +327,7 @@ function onEnded(){
     doneBanner.style.display="block"
     resetBtn.style.display="block"
     graphBox.style.display="block"
-    setTimeout(()=>drawGraph(spikes, result.lower, result.upper, result.norm, result.w),100)
+    setTimeout(()=>drawGraph(spikes, null, null, null, result.w),100)
   }, 200)
 }
 
