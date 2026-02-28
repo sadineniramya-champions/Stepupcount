@@ -34,7 +34,7 @@ button{font-family:inherit;cursor:pointer}
 .choose-btn{width:100%;padding:14px 0;background:linear-gradient(135deg,#00FF96,#00C97A);color:#08080F;border:none;border-radius:10px;font-size:14px;font-weight:bold;letter-spacing:2px;margin-bottom:10px}
 .choose-btn:disabled{background:#111;color:#444;opacity:0.5;cursor:not-allowed}
 .status-msg{text-align:center;font-size:12px;color:#FFD700;margin-bottom:8px;min-height:20px}
-.done-banner{background:rgba(0,255,150,0.08);border:1px solid rgba(0,255,150,0.2);border-radius:10px;padding:12px 16px;margin-bottom:12px;color:#00FF96;font-size:13px;text-align:center;display:none}
+.done-banner{background:rgba(0,255,150,0.08);border:1px solid rgba(0,255,150,0.2);border-radius:10px;padding:12px 16px;margin-bottom:12px;color:#00FF96;font-size:15px;text-align:center;display:none;font-weight:bold;letter-spacing:2px}
 .stats{display:flex;gap:10px;margin-bottom:12px}
 .rep-card{background:linear-gradient(135deg,rgba(0,255,150,0.09),rgba(0,255,150,0.02));border:1px solid rgba(0,255,150,0.2);border-radius:12px;padding:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:110px}
 .rep-label{font-size:10px;letter-spacing:3px;color:#00FF96;margin-bottom:6px;opacity:0.8}
@@ -48,9 +48,9 @@ button{font-family:inherit;cursor:pointer}
 .graph-title{font-size:10px;letter-spacing:3px;color:#555;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
 .graph-title span{color:#00FF96;font-size:11px}
 #graphCanvas{width:100%;border-radius:6px;display:block}
-.graph-legend{display:flex;gap:16px;margin-top:8px;flex-wrap:wrap}
+.graph-legend{display:flex;gap:12px;margin-top:10px;flex-wrap:wrap}
 .leg-item{display:flex;align-items:center;gap:5px;font-size:10px;color:#555}
-.leg-dot{width:8px;height:8px;border-radius:50%}
+.leg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .reset-btn{width:100%;padding:12px 0;background:transparent;border:1px solid #2A2A3A;border-radius:10px;color:#555;font-size:12px;letter-spacing:2px;margin-bottom:8px;display:none}
 .spacer{height:32px}
 </style>
@@ -96,179 +96,196 @@ button{font-family:inherit;cursor:pointer}
       <div class="rep-sub">reps</div>
     </div>
     <div class="state-card">
-      <div class="card-label">STATE</div>
-      <div class="state-badge" id="stateVal" style="color:#555">LOW</div>
+      <div class="card-label">STATUS</div>
+      <div class="state-badge" id="stateVal" style="color:#555">--</div>
       <div class="card-hint" id="stateHint">Waiting for video...</div>
     </div>
   </div>
 
-  <!-- Graph shown after video ends -->
-
   <div class="graph-box" id="graphBox">
     <div class="graph-title">
       LEFT ANKLE Y — FULL VIDEO
-      <span id="graphFrames">0 frames</span>
+      <span id="graphInfo">--</span>
     </div>
-    <canvas id="graphCanvas" height="180"></canvas>
+    <canvas id="graphCanvas" height="200"></canvas>
     <div class="graph-legend">
-      <div class="leg-item"><div class="leg-dot" style="background:#00FF96"></div>Left ankle Y (smoothed)</div>
-      <div class="leg-item"><div class="leg-dot" style="background:#FFD700"></div>Baseline</div>
-      <div class="leg-item"><div class="leg-dot" style="background:#FF6B6B"></div>HIGH threshold</div>
-      <div class="leg-item"><div class="leg-dot" style="background:#444;border:1px solid #666"></div>Count event</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#00FF96"></div>Left ankle Y</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#FF6B6B"></div>Spike (rep)</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#FFD700"></div>Min threshold</div>
     </div>
   </div>
 
-<button class="reset-btn" id="resetBtn" onclick="resetAll()">↺  Reset Counter</button>
+<button class="reset-btn" id="resetBtn" onclick="resetAll()">↺  Reset</button>
 
   <div class="spacer"></div>
 </div>
 
 <script type="module">
-const CDN = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14"
+const CDN   = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14"
 const MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
+const SMOOTH = 0.15
 
-const HIGH_THRESH = -0.06
-const LOW_THRESH  = -0.02
-const SMOOTH      = 0.2
-
-const vid=document.getElementById("vid")
-const cv=document.getElementById("cv")
-const pill=document.getElementById("pill")
-const statusMsg=document.getElementById("statusMsg")
-const repNum=document.getElementById("repNum")
-const stateVal=document.getElementById("stateVal")
-const stateHint=document.getElementById("stateHint")
-const doneBanner=document.getElementById("doneBanner")
-const chooseBtn=document.getElementById("chooseBtn")
-const resetBtn=document.getElementById("resetBtn")
-const empty=document.getElementById("empty")
-const graphBox=document.getElementById("graphBox")
+const vid       = document.getElementById("vid")
+const cv        = document.getElementById("cv")
+const pill      = document.getElementById("pill")
+const statusMsg = document.getElementById("statusMsg")
+const repNum    = document.getElementById("repNum")
+const stateVal  = document.getElementById("stateVal")
+const stateHint = document.getElementById("stateHint")
+const doneBanner= document.getElementById("doneBanner")
+const chooseBtn = document.getElementById("chooseBtn")
+const resetBtn  = document.getElementById("resetBtn")
+const empty     = document.getElementById("empty")
+const graphBox  = document.getElementById("graphBox")
 const graphCanvas=document.getElementById("graphCanvas")
-const graphFrames=document.getElementById("graphFrames")
+const graphInfo = document.getElementById("graphInfo")
 
-let lmk=null, raf=null, lastT=-1, count=0
-let state="LOW", smoothedAnkle=null, baseline=null
+let lmk=null, raf=null, lastT=-1
+let smoothed=null
+let signal=[]   // {t, y} per frame — raw smoothed left ankle Y
 
-// Recording arrays
-let recordedAnkle=[]    // raw avg ankle Y per frame
-let recordedSmooth=[]   // smoothed ankle Y
-let recordedBaseline=[] // baseline per frame
-let recordedTime=[]     // video timestamp
-let countEvents=[]      // timestamps where a rep was counted
+// ── Spike detection (post-processing) ─────────────────────────
+// In MediaPipe Y coords: ankle ON STEP = smaller Y = dip in signal
+// So we find local MINIMA (dips) that are deep enough and far enough apart
+function detectSpikes(signal, minDrop=0.03, minGapFrames=15){
+  if(signal.length<10) return []
 
+  const vals = signal.map(s=>s.y)
+
+  // Smooth again with wider window for cleaner peak detection
+  const w = []
+  const WIN = 8
+  for(let i=0;i<vals.length;i++){
+    let sum=0,cnt=0
+    for(let j=Math.max(0,i-WIN);j<=Math.min(vals.length-1,i+WIN);j++){sum+=vals[j];cnt++}
+    w.push(sum/cnt)
+  }
+
+  // Find local minima
+  const minima=[]
+  for(let i=1;i<w.length-1;i++){
+    if(w[i]<w[i-1] && w[i]<w[i+1]){
+      minima.push({i, y:w[i]})
+    }
+  }
+
+  if(!minima.length) return []
+
+  // Dynamic threshold: mean - minDrop*range
+  const mean = vals.reduce((a,b)=>a+b,0)/vals.length
+  const range = Math.max(...vals) - Math.min(...vals)
+  const thresh = mean - minDrop * (range/0.05) * 0.01
+  // Simpler: just use mean minus fraction of range
+  const dynThresh = mean - range * 0.25
+
+  // Keep only minima below threshold
+  const deep = minima.filter(m => m.y < dynThresh)
+
+  // Enforce minimum gap between spikes (avoid double-counting)
+  const spikes=[]
+  let lastIdx=-minGapFrames
+  for(const m of deep){
+    if(m.i - lastIdx >= minGapFrames){
+      spikes.push(m)
+      lastIdx=m.i
+    }
+  }
+
+  return spikes
+}
+
+// ── Draw graph ────────────────────────────────────────────────
+function drawGraph(spikes){
+  const W = graphCanvas.offsetWidth || 300
+  graphCanvas.width = W
+  graphCanvas.height = 200
+  const H=200
+  const pad={t:20,b:28,l:38,r:10}
+  const iW=W-pad.l-pad.r
+  const iH=H-pad.t-pad.b
+
+  const ctx=graphCanvas.getContext("2d")
+  ctx.fillStyle="#0C0C14"; ctx.fillRect(0,0,W,H)
+
+  const vals=signal.map(s=>s.y)
+  const times=signal.map(s=>s.t)
+  const minV=Math.min(...vals)-0.005
+  const maxV=Math.max(...vals)+0.005
+
+  function px(i){ return pad.l+(i/(vals.length-1))*iW }
+  function py(v){ return pad.t+((v-minV)/(maxV-minV))*iH }
+
+  // Grid
+  ctx.strokeStyle="#1A1A28"; ctx.lineWidth=1
+  for(let g=0;g<=4;g++){
+    const y=pad.t+(g/4)*iH
+    ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(pad.l+iW,y);ctx.stroke()
+    const val=maxV-((g/4)*(maxV-minV))
+    ctx.fillStyle="#333";ctx.font="9px Courier New";ctx.textAlign="right"
+    ctx.fillText(val.toFixed(3),pad.l-3,y+3)
+  }
+
+  // Dynamic threshold line
+  const range=maxV-minV
+  const mean=vals.reduce((a,b)=>a+b,0)/vals.length
+  const dynThresh=mean-range*0.25
+  const ty=py(dynThresh)
+  ctx.strokeStyle="rgba(255,215,0,0.5)"; ctx.lineWidth=1; ctx.setLineDash([4,4])
+  ctx.beginPath();ctx.moveTo(pad.l,ty);ctx.lineTo(pad.l+iW,ty);ctx.stroke()
+  ctx.setLineDash([])
+  ctx.fillStyle="#FFD700";ctx.font="9px Courier New";ctx.textAlign="left"
+  ctx.fillText("threshold",pad.l+3,ty-3)
+
+  // Signal line
+  ctx.strokeStyle="#00FF96"; ctx.lineWidth=2
+  ctx.beginPath()
+  vals.forEach((v,i)=>{ i===0?ctx.moveTo(px(i),py(v)):ctx.lineTo(px(i),py(v)) })
+  ctx.stroke()
+
+  // Spike markers
+  for(const sp of spikes){
+    const x=px(sp.i), y=py(sp.y)
+    // Vertical line
+    ctx.strokeStyle="rgba(255,107,107,0.4)"; ctx.lineWidth=1
+    ctx.beginPath();ctx.moveTo(x,pad.t);ctx.lineTo(x,pad.t+iH);ctx.stroke()
+    // Dot at minimum
+    ctx.beginPath();ctx.arc(x,y,5,0,Math.PI*2)
+    ctx.fillStyle="#FF6B6B"; ctx.fill()
+  }
+
+  // X axis time labels
+  const totalT=times[times.length-1]||1
+  ctx.fillStyle="#333";ctx.font="9px Courier New";ctx.textAlign="center"
+  for(let t=0;t<=4;t++){
+    const x=pad.l+(t/4)*iW
+    ctx.fillText(((t/4)*totalT).toFixed(0)+"s",x,H-6)
+  }
+
+  graphInfo.textContent=vals.length+" frames · "+totalT.toFixed(1)+"s · "+spikes.length+" spikes"
+}
+
+// ── Skeleton draw ─────────────────────────────────────────────
 const BONES=[[23,25],[25,27],[24,26],[26,28],[23,24]]
 const KP=[23,24,25,26,27,28]
-
-function draw(sets){
+function drawSkeleton(sets){
   if(!vid.videoWidth)return
-  cv.width=vid.videoWidth;cv.height=vid.videoHeight
-  const ctx=cv.getContext("2d");ctx.clearRect(0,0,cv.width,cv.height)
+  cv.width=vid.videoWidth; cv.height=vid.videoHeight
+  const ctx=cv.getContext("2d"); ctx.clearRect(0,0,cv.width,cv.height)
   if(!sets||!sets.length)return
   const lms=sets[0],W=cv.width,H=cv.height
-  const boneCol=state==="HIGH"?"rgba(0,255,150,0.9)":"rgba(255,215,0,0.7)"
-  ctx.lineWidth=3
+  ctx.strokeStyle="rgba(255,215,0,0.8)"; ctx.lineWidth=3
   for(const[a,b]of BONES){
     if(!lms[a]||!lms[b])continue
-    ctx.strokeStyle=boneCol
     ctx.beginPath();ctx.moveTo(lms[a].x*W,lms[a].y*H);ctx.lineTo(lms[b].x*W,lms[b].y*H);ctx.stroke()
   }
   for(const i of KP){
     if(!lms[i])continue
     ctx.beginPath();ctx.arc(lms[i].x*W,lms[i].y*H,7,0,Math.PI*2)
-    ctx.fillStyle=(i===27||i===28)?(state==="HIGH"?"#00FF96":"#FFD700"):"#FF6B6B"
-    ctx.fill()
+    ctx.fillStyle=i===27?"#00FF96":i<=24?"#FF6B6B":"#FFD700"; ctx.fill()
   }
 }
 
-function setUIState(s){
-  state=s
-  stateVal.textContent=s==="HIGH"?"HIGH":"LOW"
-  stateVal.style.color=s==="HIGH"?"#00FF96":"#FFD700"
-  stateHint.textContent=s==="HIGH"?"On step — come back down for +1":"On ground — step up to count"
-}
-
-function drawGraph(){
-  const data=recordedSmooth
-  const base=recordedBaseline
-  const times=recordedTime
-  if(!data.length)return
-
-  const W=graphCanvas.offsetWidth||300
-  graphCanvas.width=W
-  graphCanvas.height=180
-  const H=180
-  const pad={t:16,b:24,l:36,r:10}
-  const iW=W-pad.l-pad.r
-  const iH=H-pad.t-pad.b
-
-  const ctx=graphCanvas.getContext("2d")
-  ctx.clearRect(0,0,W,H)
-
-  // Background
-  ctx.fillStyle="#0C0C14"
-  ctx.fillRect(0,0,W,H)
-
-  // Find Y range
-  const allVals=[...data,...base]
-  let minY=Math.min(...allVals)-0.02
-  let maxY=Math.max(...allVals)+0.02
-
-  function px(i){ return pad.l + (i/(data.length-1))*iW }
-  function py(v){ return pad.t + ((v-minY)/(maxY-minY))*iH }
-
-  // Grid lines
-  ctx.strokeStyle="#1A1A28";ctx.lineWidth=1
-  for(let g=0;g<5;g++){
-    const y=pad.t+(g/4)*iH
-    ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(pad.l+iW,y);ctx.stroke()
-    const val=maxY-((g/4)*(maxY-minY))
-    ctx.fillStyle="#333";ctx.font="9px Courier New";ctx.textAlign="right"
-    ctx.fillText(val.toFixed(2),pad.l-3,y+3)
-  }
-
-  // HIGH threshold line
-  const highY=py(( baseline[0]||0 )+HIGH_THRESH)
-  ctx.strokeStyle="rgba(255,107,107,0.5)";ctx.lineWidth=1;ctx.setLineDash([4,4])
-  ctx.beginPath();ctx.moveTo(pad.l,highY);ctx.lineTo(pad.l+iW,highY);ctx.stroke()
-  ctx.setLineDash([])
-  ctx.fillStyle="#FF6B6B";ctx.font="9px Courier New";ctx.textAlign="left"
-  ctx.fillText("HIGH",pad.l+2,highY-3)
-
-  // Count event vertical lines
-  for(const t of countEvents){
-    const idx=times.findIndex(x=>x>=t)
-    if(idx<0)continue
-    const x=px(idx)
-    ctx.strokeStyle="rgba(255,255,255,0.2)";ctx.lineWidth=1
-    ctx.beginPath();ctx.moveTo(x,pad.t);ctx.lineTo(x,pad.t+iH);ctx.stroke()
-    ctx.fillStyle="#888";ctx.font="9px Courier New";ctx.textAlign="center"
-    ctx.fillText("+1",x,pad.t+8)
-  }
-
-  // Baseline line
-  ctx.strokeStyle="rgba(255,215,0,0.5)";ctx.lineWidth=1.5
-  ctx.beginPath()
-  base.forEach((v,i)=>{ i===0?ctx.moveTo(px(i),py(v)):ctx.lineTo(px(i),py(v)) })
-  ctx.stroke()
-
-  // Ankle signal line
-  ctx.strokeStyle="#00FF96";ctx.lineWidth=2
-  ctx.beginPath()
-  data.forEach((v,i)=>{ i===0?ctx.moveTo(px(i),py(v)):ctx.lineTo(px(i),py(v)) })
-  ctx.stroke()
-
-  // X axis labels (time)
-  const totalT=times[times.length-1]||1
-  ctx.fillStyle="#333";ctx.font="9px Courier New";ctx.textAlign="center"
-  for(let t=0;t<=4;t++){
-    const x=pad.l+(t/4)*iW
-    const sec=((t/4)*totalT).toFixed(1)
-    ctx.fillText(sec+"s",x,H-4)
-  }
-
-  graphFrames.textContent=data.length+" frames · "+totalT.toFixed(1)+"s"
-}
-
+// ── Main loop ─────────────────────────────────────────────────
 function frame(){
   if(!vid||!lmk)return
   if(vid.paused||vid.ended){if(vid.ended)onEnded();return}
@@ -277,33 +294,12 @@ function frame(){
   try{
     const r=lmk.detectForVideo(vid,performance.now())
     const lms=r&&r.landmarks&&r.landmarks[0]
-    if(!lms){raf=requestAnimationFrame(frame);return}
-
-    const avgAnkle=lms[27].y
-    if(smoothedAnkle===null)smoothedAnkle=avgAnkle
-    smoothedAnkle=smoothedAnkle*(1-SMOOTH)+avgAnkle*SMOOTH
-    if(baseline===null)baseline=smoothedAnkle
-    if(state==="LOW")baseline=baseline*0.98+smoothedAnkle*0.02
-
-    const delta=smoothedAnkle-baseline
-
-    // Record every frame
-    recordedAnkle.push(avgAnkle)
-    recordedSmooth.push(smoothedAnkle)
-    recordedBaseline.push(baseline)
-    recordedTime.push(vid.currentTime)
-
-    draw(r.landmarks)
-
-    // Count logic
-    if(state==="LOW"&&delta<HIGH_THRESH){
-      setUIState("HIGH")
-    } else if(state==="HIGH"&&delta>LOW_THRESH){
-      count++
-      repNum.textContent=count
-      resetBtn.style.display="block"
-      countEvents.push(vid.currentTime)
-      setUIState("LOW")
+    drawSkeleton(r?r.landmarks:[])
+    if(lms){
+      const raw=lms[27].y
+      if(smoothed===null) smoothed=raw
+      smoothed=smoothed*(1-SMOOTH)+raw*SMOOTH
+      signal.push({t:vid.currentTime, y:smoothed})
     }
   }catch(e){}
   raf=requestAnimationFrame(frame)
@@ -311,36 +307,48 @@ function frame(){
 
 function onEnded(){
   cancelAnimationFrame(raf)
-  pill.textContent="✅ Done"
-  doneBanner.textContent="✅ Done — "+count+" step-up"+(count!==1?"s":"")+" detected"
-  doneBanner.style.display="block"
-  resetBtn.style.display="block"
-  // Show graph
-  graphBox.style.display="block"
-  setTimeout(drawGraph, 100)
+  pill.textContent="🔍 Counting..."
+  stateVal.textContent="COUNTING"
+  stateVal.style.color="#FFD700"
+  stateHint.textContent="Analysing signal..."
+  statusMsg.textContent=""
+
+  setTimeout(()=>{
+    const spikes=detectSpikes(signal)
+    const count=spikes.length
+    repNum.textContent=count
+    pill.textContent="✅ Done"
+    stateVal.textContent="DONE"
+    stateVal.style.color="#00FF96"
+    stateHint.textContent=count+" step-ups detected from signal"
+    doneBanner.textContent="✅ "+count+" step-up"+(count!==1?"s":"")+" detected"
+    doneBanner.style.display="block"
+    resetBtn.style.display="block"
+    graphBox.style.display="block"
+    setTimeout(()=>drawGraph(spikes),100)
+  }, 200)
 }
 
 window.resetAll=function(){
   cancelAnimationFrame(raf)
-  count=0;lastT=-1;state="LOW";smoothedAnkle=null;baseline=null
-  recordedAnkle=[];recordedSmooth=[];recordedBaseline=[];recordedTime=[];countEvents=[]
+  lastT=-1; smoothed=null; signal=[]
   repNum.textContent="0"
-  setUIState("LOW")
+  stateVal.textContent="--"; stateVal.style.color="#555"
   stateHint.textContent="Waiting for video..."
   doneBanner.style.display="none"
   graphBox.style.display="none"
   resetBtn.style.display="none"
-  vid.currentTime=0;vid.pause()
+  vid.currentTime=0; vid.pause()
   pill.textContent="✅ Ready"
+  statusMsg.textContent=""
 }
 
 document.getElementById("fileIn").addEventListener("change",function(e){
-  const f=e.target.files&&e.target.files[0];if(!f)return
+  const f=e.target.files&&e.target.files[0]; if(!f)return
   cancelAnimationFrame(raf)
-  count=0;lastT=-1;state="LOW";smoothedAnkle=null;baseline=null
-  recordedAnkle=[];recordedSmooth=[];recordedBaseline=[];recordedTime=[];countEvents=[]
+  lastT=-1; smoothed=null; signal=[]
   repNum.textContent="0"
-  setUIState("LOW")
+  stateVal.textContent="--"; stateVal.style.color="#555"
   stateHint.textContent="Waiting for video..."
   doneBanner.style.display="none"
   graphBox.style.display="none"
@@ -348,27 +356,23 @@ document.getElementById("fileIn").addEventListener("change",function(e){
   empty.style.display="none"
   vid.style.display="block"
   cv.style.display="block"
-  vid.src=URL.createObjectURL(f)
-  vid.load()
+  vid.src=URL.createObjectURL(f); vid.load()
   pill.textContent="✅ Ready"
   statusMsg.textContent="Video loaded — press play!"
   setTimeout(()=>{statusMsg.textContent=""},3000)
 })
 
 vid.addEventListener("play",function(){
-  pill.textContent="▶ Analysing"
-  statusMsg.textContent=""
-  lastT=-1
+  pill.textContent="▶ Recording..."
+  stateVal.textContent="RECORDING"
+  stateVal.style.color="#FFD700"
+  stateHint.textContent="Recording ankle signal..."
+  statusMsg.textContent=""; lastT=-1
   raf=requestAnimationFrame(frame)
 })
 vid.addEventListener("pause",function(){
   cancelAnimationFrame(raf)
   pill.textContent="✅ Ready"
-  // Draw graph with whatever we have so far
-  if(recordedSmooth.length>10){
-    graphBox.style.display="block"
-    setTimeout(drawGraph,100)
-  }
 })
 
 ;(async()=>{
