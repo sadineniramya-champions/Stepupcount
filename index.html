@@ -21,7 +21,6 @@ button{font-family:inherit;cursor:pointer}
 .tip button{background:none;border:none;color:#555;font-size:16px;padding-left:10px}
 .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
 .logo{display:flex;align-items:center;gap:10px}
-.logo-icon{font-size:28px}
 .app-title{font-size:16px;font-weight:bold;letter-spacing:3px;color:#00FF96}
 .app-sub{font-size:10px;letter-spacing:1.5px;color:#555;margin-top:2px}
 .pill{font-size:11px;background:rgba(0,255,150,0.08);border:1px solid rgba(0,255,150,0.2);border-radius:20px;padding:5px 11px;color:#00FF96}
@@ -42,23 +41,19 @@ button{font-family:inherit;cursor:pointer}
 .rep-label{font-size:10px;letter-spacing:3px;color:#00FF96;margin-bottom:6px;opacity:0.8}
 .rep-num{font-size:64px;font-weight:bold;color:#00FF96;line-height:1;text-shadow:0 0 30px rgba(0,255,150,0.4)}
 .rep-sub{font-size:11px;color:#444;letter-spacing:2px;margin-top:4px}
-.stats-right{flex:1;display:flex;flex-direction:column;gap:10px}
-.card{background:#10101A;border:1px solid #1E1E30;border-radius:12px;padding:14px}
-.card-label{font-size:10px;letter-spacing:2.5px;color:#555;margin-bottom:5px}
-.card-val{font-size:18px;font-weight:bold;margin-bottom:3px}
-.card-hint{font-size:10px;color:#333;line-height:14px}
-.legs-row{display:flex;gap:8px;margin-bottom:12px}
-.leg-card{flex:1;background:#10101A;border:1px solid #1E1E30;border-radius:12px;padding:12px;text-align:center}
-.leg-title{font-size:10px;letter-spacing:2px;color:#555;margin-bottom:6px}
-.leg-status{font-size:16px;font-weight:bold;margin-bottom:4px}
-.leg-bar-bg{height:6px;background:#1E1E30;border-radius:3px;overflow:hidden}
-.leg-bar{height:6px;border-radius:3px;transition:width 0.1s;background:#00FF96}
+.state-card{flex:1;background:#10101A;border:1px solid #1E1E30;border-radius:12px;padding:14px;display:flex;flex-direction:column;justify-content:center}
+.card-label{font-size:10px;letter-spacing:2.5px;color:#555;margin-bottom:8px}
+.state-badge{font-size:20px;font-weight:bold;margin-bottom:4px}
+.card-hint{font-size:10px;color:#333;line-height:15px}
+.metrics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}
+.metric{background:#10101A;border:1px solid #1E1E30;border-radius:10px;padding:10px;text-align:center}
+.metric-label{font-size:9px;letter-spacing:1.5px;color:#555;margin-bottom:4px}
+.metric-val{font-size:16px;font-weight:bold;color:#FFD700}
 .info{background:#0C0C14;border:1px solid #1A1A28;border-radius:12px;padding:16px;margin-bottom:12px}
 .info-title{font-size:10px;letter-spacing:3px;color:#444;margin-bottom:10px}
-.info-body{font-size:12px;color:#555;line-height:20px;margin-bottom:12px}
-.legend-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
-.dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0}
-.legend-txt{font-size:12px;color:#666}
+.step-row{display:flex;align-items:flex-start;gap:10px;margin-bottom:8px}
+.step-num{font-size:11px;color:#00FF96;min-width:18px;font-weight:bold;margin-top:1px}
+.step-txt{font-size:12px;color:#555;line-height:18px}
 .reset-btn{width:100%;padding:12px 0;background:transparent;border:1px solid #2A2A3A;border-radius:10px;color:#555;font-size:12px;letter-spacing:2px;margin-bottom:8px;display:none}
 .spacer{height:32px}
 </style>
@@ -74,7 +69,7 @@ button{font-family:inherit;cursor:pointer}
 
   <div class="header">
     <div class="logo">
-      <span class="logo-icon">⬆</span>
+      <span style="font-size:28px;margin-right:10px">⬆</span>
       <div>
         <div class="app-title">STEP-UP COUNTER</div>
         <div class="app-sub">AI Rep Tracker · MediaPipe Pose</div>
@@ -105,38 +100,36 @@ button{font-family:inherit;cursor:pointer}
       <div class="rep-num" id="repNum">0</div>
       <div class="rep-sub">reps</div>
     </div>
-    <div class="stats-right">
-      <div class="card">
-        <div class="card-label">PHASE</div>
-        <div class="card-val" id="phaseVal" style="color:#444">--</div>
-        <div class="card-hint" id="phaseHint">Waiting for video...</div>
-      </div>
+    <div class="state-card">
+      <div class="card-label">STATE</div>
+      <div class="state-badge" id="stateVal" style="color:#555">READY</div>
+      <div class="card-hint" id="stateHint">Waiting for video...</div>
     </div>
   </div>
 
-  <!-- Individual leg status cards -->
+  <!-- Live metrics -->
 
-  <div class="legs-row">
-    <div class="leg-card">
-      <div class="leg-title">LEFT LEG</div>
-      <div class="leg-status" id="leftStatus" style="color:#555">DOWN</div>
-      <div class="leg-bar-bg"><div class="leg-bar" id="leftBar" style="width:0%"></div></div>
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-label">L.ANKLE Y</div>
+      <div class="metric-val" id="lAnkleY">--</div>
     </div>
-    <div class="leg-card">
-      <div class="leg-title">RIGHT LEG</div>
-      <div class="leg-status" id="rightStatus" style="color:#555">DOWN</div>
-      <div class="leg-bar-bg"><div class="leg-bar" id="rightBar" style="width:0%"></div></div>
+    <div class="metric">
+      <div class="metric-label">HIP Y</div>
+      <div class="metric-val" id="hipY">--</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">R.ANKLE Y</div>
+      <div class="metric-val" id="rAnkleY">--</div>
     </div>
   </div>
 
   <div class="info">
-    <div class="info-title">HOW IT WORKS</div>
-    <div class="info-body">Each leg is tracked independently. One full rep = left leg steps up and down AND right leg steps up and down.</div>
-    <div class="legend-row"><span class="dot" style="background:#FFD700"></span><span class="legend-txt">Left foot UP on step</span></div>
-    <div class="legend-row"><span class="dot" style="background:#555"></span><span class="legend-txt">Left foot back DOWN</span></div>
-    <div class="legend-row"><span class="dot" style="background:#FF6B6B"></span><span class="legend-txt">Right foot UP on step</span></div>
-    <div class="legend-row"><span class="dot" style="background:#555"></span><span class="legend-txt">Right foot back DOWN</span></div>
-    <div class="legend-row"><span class="dot" style="background:#00FF96"></span><span class="legend-txt">Both done = +1 rep</span></div>
+    <div class="info-title">COUNTING LOGIC</div>
+    <div class="step-row"><span class="step-num">1</span><span class="step-txt">Both ankles at hip level → READY</span></div>
+    <div class="step-row"><span class="step-num">2</span><span class="step-txt">One ankle rises above hip → LIFT</span></div>
+    <div class="step-row"><span class="step-num">3</span><span class="step-txt">Hip Y also rises (body up) → RISE</span></div>
+    <div class="step-row"><span class="step-num">4</span><span class="step-txt">Second ankle levels with first → COUNT +1 → READY</span></div>
   </div>
 
 <button class="reset-btn" id="resetBtn" onclick="resetAll()">↺  Reset Counter</button>
@@ -148,109 +141,72 @@ button{font-family:inherit;cursor:pointer}
 const CDN = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14"
 const MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
 
-// How much ankle must rise above hip to count as UP (fraction of frame height)
-const UP_THRESH = 0.06    // ankle 6% above hip = foot on step
-const DOWN_THRESH = 0.01  // ankle within 1% of hip = foot on ground
+// Tuning thresholds (all in normalised 0-1 coords)
+const ANKLE_LIFT_THRESH  = 0.05   // ankle must be this much ABOVE hip to count as lifted
+const HIP_RISE_THRESH    = 0.03   // hip must rise this much from baseline to confirm body weight shifted
+const ANKLE_LEVEL_THRESH = 0.04   // second ankle within this Y distance of first = both on step
 
 const vid=document.getElementById("vid")
 const cv=document.getElementById("cv")
 const pill=document.getElementById("pill")
 const statusMsg=document.getElementById("statusMsg")
 const repNum=document.getElementById("repNum")
-const phaseVal=document.getElementById("phaseVal")
-const phaseHint=document.getElementById("phaseHint")
+const stateVal=document.getElementById("stateVal")
+const stateHint=document.getElementById("stateHint")
 const doneBanner=document.getElementById("doneBanner")
 const chooseBtn=document.getElementById("chooseBtn")
 const resetBtn=document.getElementById("resetBtn")
 const empty=document.getElementById("empty")
-const leftStatus=document.getElementById("leftStatus")
-const rightStatus=document.getElementById("rightStatus")
-const leftBar=document.getElementById("leftBar")
-const rightBar=document.getElementById("rightBar")
+const lAnkleYEl=document.getElementById("lAnkleY")
+const hipYEl=document.getElementById("hipY")
+const rAnkleYEl=document.getElementById("rAnkleY")
 
 let lmk=null, raf=null, lastT=-1, count=0
+let state="READY"
+let baselineHipY=null      // hip Y when standing on ground (calibrated)
+let liftedAnkleY=null      // Y of the ankle that first lifted
 
-// Track each leg independently
-// Each leg goes: DOWN -> UP -> DOWN = 1 leg done
-let leftState="DOWN", leftDone=false
-let rightState="DOWN", rightDone=false
+// State colours
+const SC={READY:"#888",LIFT:"#FFD700",RISE:"#FF6B6B",READY_COUNT:"#00FF96"}
 
-function rise(hip, ankle){
-  // positive = ankle above hip (on step), negative = ankle below hip
-  return hip.y - ankle.y
+function setState(s, hint){
+  state=s
+  stateVal.textContent=s
+  stateVal.style.color=SC[s]||"#888"
+  stateHint.textContent=hint
 }
 
-function legIsUp(r){ return r > UP_THRESH }
-function legIsDown(r){ return r < DOWN_THRESH }
+// Average of left+right hip Y
+function hipY(lms){ return (lms[23].y + lms[24].y) / 2 }
 
-const BONES=[[23,25],[25,27],[24,26],[26,28],[23,24],[27,28]]
+// ankle Y relative to hip — negative means ankle is ABOVE hip (lifted)
+function ankleRelY(ankleY, hipY){ return ankleY - hipY }  // negative = above hip
+
+const BONES=[[23,25],[25,27],[24,26],[26,28],[23,24]]
 const KP=[23,24,25,26,27,28]
 
-function draw(sets){
+function draw(sets, lRel, rRel){
   if(!vid.videoWidth)return
   cv.width=vid.videoWidth;cv.height=vid.videoHeight
-  const ctx=cv.getContext("2d")
-  ctx.clearRect(0,0,cv.width,cv.height)
+  const ctx=cv.getContext("2d");ctx.clearRect(0,0,cv.width,cv.height)
   if(!sets||!sets.length)return
   const lms=sets[0],W=cv.width,H=cv.height
   ctx.lineWidth=3
+  // Left leg yellow, right leg orange
   for(const[a,b]of BONES){
     if(!lms[a]||!lms[b])continue
-    // Left leg = yellow, right leg = red/green
-    const isLeft = a>=23&&a<=25&&b<=27
-    ctx.strokeStyle=isLeft?"rgba(255,215,0,0.8)":"rgba(255,107,107,0.8)"
+    const isLeft=(a===23||a===25||a===27)
+    ctx.strokeStyle=isLeft?"rgba(255,215,0,0.85)":"rgba(255,107,107,0.85)"
     ctx.beginPath();ctx.moveTo(lms[a].x*W,lms[a].y*H);ctx.lineTo(lms[b].x*W,lms[b].y*H);ctx.stroke()
   }
   for(const i of KP){
     if(!lms[i])continue
-    ctx.beginPath();ctx.arc(lms[i].x*W,lms[i].y*H,6,0,Math.PI*2)
-    ctx.fillStyle=i===27||i===25||i===23?"#FFD700":i===28||i===26||i===24?"#FF6B6B":"#fff"
+    ctx.beginPath();ctx.arc(lms[i].x*W,lms[i].y*H,7,0,Math.PI*2)
+    // Ankles glow green when lifted
+    if(i===27) ctx.fillStyle=lRel<-ANKLE_LIFT_THRESH?"#00FF96":"#FFD700"
+    else if(i===28) ctx.fillStyle=rRel<-ANKLE_LIFT_THRESH?"#00FF96":"#FF6B6B"
+    else ctx.fillStyle=i<=24?"#FF6B6B":"#FFD700"
     ctx.fill()
-  }
-}
-
-function updateLegUI(side, state, riseVal){
-  const pct = Math.min(100, Math.max(0, riseVal*500))
-  if(side==="left"){
-    leftStatus.textContent = state==="UP" ? "ON STEP" : "GROUNDED"
-    leftStatus.style.color = state==="UP" ? "#FFD700" : leftDone ? "#00FF96" : "#555"
-    leftBar.style.width = pct+"%"
-    leftBar.style.background = state==="UP" ? "#FFD700" : "#00FF96"
-  } else {
-    rightStatus.textContent = state==="UP" ? "ON STEP" : "GROUNDED"
-    rightStatus.style.color = state==="UP" ? "#FF6B6B" : rightDone ? "#00FF96" : "#555"
-    rightBar.style.width = pct+"%"
-    rightBar.style.background = state==="UP" ? "#FF6B6B" : "#00FF96"
-  }
-}
-
-function updatePhase(){
-  // Show progress toward completing a rep
-  const ld = leftDone, rd = rightDone
-  if(ld && rd){
-    phaseVal.textContent = "COMPLETE!"
-    phaseVal.style.color = "#00FF96"
-    phaseHint.textContent = "Full rep counted!"
-  } else if(ld){
-    phaseVal.textContent = "LEFT DONE"
-    phaseVal.style.color = "#FFD700"
-    phaseHint.textContent = "Now right leg up and down..."
-  } else if(rd){
-    phaseVal.textContent = "RIGHT DONE"
-    phaseVal.style.color = "#FF6B6B"
-    phaseHint.textContent = "Now left leg up and down..."
-  } else if(leftState==="UP"){
-    phaseVal.textContent = "LEFT UP"
-    phaseVal.style.color = "#FFD700"
-    phaseHint.textContent = "Left foot on step — bring it down"
-  } else if(rightState==="UP"){
-    phaseVal.textContent = "RIGHT UP"
-    phaseVal.style.color = "#FF6B6B"
-    phaseHint.textContent = "Right foot on step — bring it down"
-  } else {
-    phaseVal.textContent = "READY"
-    phaseVal.style.color = "#555"
-    phaseHint.textContent = "Step one foot up on the step"
   }
 }
 
@@ -262,44 +218,70 @@ function frame(){
   try{
     const r=lmk.detectForVideo(vid,performance.now())
     const lms=r&&r.landmarks&&r.landmarks[0]
-    draw(r?r.landmarks:[])
+    if(!lms){raf=requestAnimationFrame(frame);return}
 
-    if(lms){
-      const lRise = rise(lms[23], lms[27])  // left hip vs left ankle
-      const rRise = rise(lms[24], lms[28])  // right hip vs right ankle
+    const hY  = hipY(lms)
+    const lAY = lms[27].y   // left ankle Y
+    const rAY = lms[28].y   // right ankle Y
+    const lRel = ankleRelY(lAY, hY)  // negative = left ankle above hip
+    const rRel = ankleRelY(rAY, hY)  // negative = right ankle above hip
 
-      // --- Left leg state machine ---
-      if(leftState==="DOWN" && legIsUp(lRise)){
-        leftState="UP"
-      } else if(leftState==="UP" && legIsDown(lRise)){
-        leftState="DOWN"
-        leftDone=true
+    draw(r.landmarks, lRel, rRel)
+
+    // Update metric display (show as % for readability)
+    lAnkleYEl.textContent=(lRel*100).toFixed(1)+"%"
+    hipYEl.textContent=hY.toFixed(2)
+    rAnkleYEl.textContent=(rRel*100).toFixed(1)+"%"
+
+    // Calibrate baseline hip Y from first few frames
+    if(baselineHipY===null) baselineHipY=hY
+
+    const hipRise = baselineHipY - hY  // positive = hip has risen (Y decreased)
+
+    // ── State machine (your pseudocode) ──────────────────────────
+    if(state==="READY"){
+      // Both ankles near hip level = feet on ground
+      const bothLevel = Math.abs(lRel)<0.08 && Math.abs(rRel)<0.08
+      if(bothLevel) baselineHipY=hY*0.05 + baselineHipY*0.95  // slow recalibrate
+
+      // One ankle lifts above hip
+      const leftLifted  = lRel < -ANKLE_LIFT_THRESH
+      const rightLifted = rRel < -ANKLE_LIFT_THRESH
+      if(leftLifted || rightLifted){
+        liftedAnkleY = leftLifted ? lAY : rAY
+        setState("LIFT", leftLifted?"Left foot on step — shift weight up":"Right foot on step — shift weight up")
       }
+    }
 
-      // --- Right leg state machine ---
-      if(rightState==="DOWN" && legIsUp(rRise)){
-        rightState="UP"
-      } else if(rightState==="UP" && legIsDown(rRise)){
-        rightState="DOWN"
-        rightDone=true
+    else if(state==="LIFT"){
+      // Hip rises = body weight shifted onto the step
+      if(hipRise > HIP_RISE_THRESH){
+        setState("RISE","Body rising — bring second foot up")
       }
+      // If foot came back down, cancel
+      const leftLifted  = lRel < -ANKLE_LIFT_THRESH
+      const rightLifted = rRel < -ANKLE_LIFT_THRESH
+      if(!leftLifted && !rightLifted){
+        setState("READY","Ready — step one foot up")
+      }
+    }
 
-      // --- Count rep when BOTH legs done ---
-      if(leftDone && rightDone){
+    else if(state==="RISE"){
+      // Second ankle levels with first (both ankles at similar Y = both on step)
+      const ankleDiff = Math.abs(lAY - rAY)
+      if(ankleDiff < ANKLE_LEVEL_THRESH){
         count++
         repNum.textContent=count
         resetBtn.style.display="block"
-        // Reset for next rep
-        leftDone=false
-        rightDone=false
-        leftState="DOWN"
-        rightState="DOWN"
+        setState("READY","Ready — step one foot up")
+        baselineHipY=hY  // recalibrate baseline from new standing position
       }
-
-      updateLegUI("left", leftState, lRise)
-      updateLegUI("right", rightState, rRise)
-      updatePhase()
+      // If hip drops back down without second foot joining, go back
+      if(hipRise < 0){
+        setState("READY","Ready — step one foot up")
+      }
     }
+
   }catch(e){}
   raf=requestAnimationFrame(frame)
 }
@@ -314,12 +296,10 @@ function onEnded(){
 
 window.resetAll=function(){
   cancelAnimationFrame(raf)
-  count=0;lastT=-1
-  leftState="DOWN";leftDone=false
-  rightState="DOWN";rightDone=false
+  count=0;lastT=-1;state="READY";baselineHipY=null;liftedAnkleY=null
   repNum.textContent="0"
-  phaseVal.textContent="--";phaseVal.style.color="#444"
-  phaseHint.textContent="Waiting for video..."
+  setState("READY","Waiting for video...")
+  lAnkleYEl.textContent="--";hipYEl.textContent="--";rAnkleYEl.textContent="--"
   doneBanner.style.display="none"
   resetBtn.style.display="none"
   vid.currentTime=0;vid.pause()
@@ -329,12 +309,10 @@ window.resetAll=function(){
 document.getElementById("fileIn").addEventListener("change",function(e){
   const f=e.target.files&&e.target.files[0];if(!f)return
   cancelAnimationFrame(raf)
-  count=0;lastT=-1
-  leftState="DOWN";leftDone=false
-  rightState="DOWN";rightDone=false
+  count=0;lastT=-1;state="READY";baselineHipY=null;liftedAnkleY=null
   repNum.textContent="0"
-  phaseVal.textContent="--";phaseVal.style.color="#444"
-  phaseHint.textContent="Waiting for video..."
+  setState("READY","Waiting for video...")
+  lAnkleYEl.textContent="--";hipYEl.textContent="--";rAnkleYEl.textContent="--"
   doneBanner.style.display="none"
   resetBtn.style.display="none"
   empty.style.display="none"
