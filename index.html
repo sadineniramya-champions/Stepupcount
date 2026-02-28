@@ -110,8 +110,9 @@ button{font-family:inherit;cursor:pointer}
     <canvas id="graphCanvas" height="200"></canvas>
     <div class="graph-legend">
       <div class="leg-item"><div class="leg-dot" style="background:#00FF96"></div>Left ankle Y</div>
-      <div class="leg-item"><div class="leg-dot" style="background:#FF6B6B"></div>Spike (rep)</div>
-      <div class="leg-item"><div class="leg-dot" style="background:#FFD700"></div>Min threshold</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#FF6B6B"></div>Detected rep</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#FFD700"></div>Lower envelope</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#64B4FF"></div>Upper envelope</div>
     </div>
   </div>
 
@@ -147,63 +148,92 @@ let signal=[]   // {t, y} per frame — raw smoothed left ankle Y
 // ── Spike detection (post-processing) ─────────────────────────
 // In MediaPipe Y coords: ankle ON STEP = smaller Y = dip in signal
 // So we find local MINIMA (dips) that are deep enough and far enough apart
-function detectSpikes(signal, minProminence=0.015){
+function detectSpikes(signal){
   if(signal.length<10) return []
 
   const vals = signal.map(s=>s.y)
+  const N = vals.length
 
-  // Smooth with wider window for cleaner peak detection
+  // ── Step 1: Light smooth to remove frame noise ──────────────
+  const WIN = 8
   const w = []
-  const WIN = 10
-  for(let i=0;i<vals.length;i++){
+  for(let i=0;i<N;i++){
     let sum=0,cnt=0
-    for(let j=Math.max(0,i-WIN);j<=Math.min(vals.length-1,i+WIN);j++){sum+=vals[j];cnt++}
+    for(let j=Math.max(0,i-WIN);j<=Math.min(N-1,i+WIN);j++){sum+=vals[j];cnt++}
     w.push(sum/cnt)
   }
 
-  // Find ALL local minima
-  const minima=[]
-  for(let i=1;i<w.length-1;i++){
-    if(w[i]<w[i-1] && w[i]<w[i+1]){
-      minima.push({i, y:w[i]})
-    }
-  }
-  if(!minima.length) return []
-
-  // Calculate prominence for each minimum
-  // Prominence = min(left_peak, right_peak) - dip_value
-  // Left peak = highest point between this dip and the previous dip
-  // Right peak = highest point between this dip and the next dip
-  function peakBetween(from, to){
-    let maxVal = -Infinity
-    for(let k=from; k<=to; k++) maxVal=Math.max(maxVal, w[k])
-    return maxVal
-  }
-
-  const prominent = []
-  for(let m=0; m<minima.length; m++){
-    const cur = minima[m]
-    // Left boundary: previous minimum or start
-    const leftBound  = m>0 ? minima[m-1].i : 0
-    // Right boundary: next minimum or end
-    const rightBound = m<minima.length-1 ? minima[m+1].i : w.length-1
-
-    const leftPeak  = peakBetween(leftBound, cur.i)
-    const rightPeak = peakBetween(cur.i, rightBound)
-
-    // Prominence = how much lower the dip is vs the shorter surrounding peak
-    const prominence = Math.min(leftPeak, rightPeak) - cur.y
-
-    if(prominence >= minProminence){
-      prominent.push({...cur, prominence})
+  // ── Step 2: Build lower envelope ────────────────────────────
+  // Lower envelope = slowly tracks the minimum of the signal
+  // Uses exponential decay - fast to drop, slow to rise
+  // This adapts to drift (person moving closer/further)
+  const DECAY_DOWN = 0.05   // fast to follow signal down
+  const DECAY_UP   = 0.002  // very slow to rise back up
+  const lower = new Array(N)
+  lower[0] = w[0]
+  for(let i=1;i<N;i++){
+    if(w[i] < lower[i-1]){
+      lower[i] = lower[i-1] * (1-DECAY_DOWN) + w[i] * DECAY_DOWN
+    } else {
+      lower[i] = lower[i-1] * (1-DECAY_UP) + w[i] * DECAY_UP
     }
   }
 
-  return prominent
+  // ── Step 3: Build upper envelope ────────────────────────────
+  const upper = new Array(N)
+  upper[0] = w[0]
+  for(let i=1;i<N;i++){
+    if(w[i] > upper[i-1]){
+      upper[i] = upper[i-1] * (1-DECAY_DOWN) + w[i] * DECAY_DOWN
+    } else {
+      upper[i] = upper[i-1] * (1-DECAY_UP) + w[i] * DECAY_UP
+    }
+  }
+
+  // ── Step 4: Normalise signal between envelopes ───────────────
+  // Each point: 0 = at lower envelope, 1 = at upper envelope
+  const norm = w.map((v,i)=>{
+    const range = upper[i] - lower[i]
+    if(range < 0.001) return 0.5
+    return (v - lower[i]) / range
+  })
+
+  // ── Step 5: Find valleys in normalised signal ────────────────
+  // A valley = signal dips below 0.3 (30% of local range)
+  // then recovers above 0.5
+  // This is purely local so drift doesn't matter
+  const VALLEY_ENTER = 0.35   // signal below this = in a valley
+  const VALLEY_EXIT  = 0.55   // signal above this = valley ended
+
+  const spikes = []
+  let inValley = false
+  let valleyStart = -1
+  let valleyMin = Infinity
+  let valleyMinIdx = -1
+
+  for(let i=0;i<N;i++){
+    if(!inValley && norm[i] < VALLEY_ENTER){
+      inValley = true
+      valleyStart = i
+      valleyMin = w[i]
+      valleyMinIdx = i
+    }
+    if(inValley){
+      if(w[i] < valleyMin){ valleyMin=w[i]; valleyMinIdx=i }
+      if(norm[i] > VALLEY_EXIT){
+        // Valley ended — record the deepest point
+        spikes.push({ i: valleyMinIdx, y: valleyMin })
+        inValley = false
+        valleyMin = Infinity
+      }
+    }
+  }
+
+  return { spikes, lower, upper, norm, w }
 }
 
 // ── Draw graph ────────────────────────────────────────────────
-function drawGraph(spikes){
+function drawGraph(spikes, lower, upper, norm, w){
   const W = graphCanvas.offsetWidth || 300
   graphCanvas.width = W
   graphCanvas.height = 200
@@ -240,6 +270,22 @@ function drawGraph(spikes){
   ctx.beginPath()
   vals.forEach((v,i)=>{ i===0?ctx.moveTo(px(i),py(v)):ctx.lineTo(px(i),py(v)) })
   ctx.stroke()
+
+  // Lower envelope (yellow)
+  if(lower){
+    ctx.strokeStyle="rgba(255,215,0,0.5)"; ctx.lineWidth=1.5; ctx.setLineDash([3,3])
+    ctx.beginPath()
+    lower.forEach((v,i)=>{ i===0?ctx.moveTo(px(i),py(v)):ctx.lineTo(px(i),py(v)) })
+    ctx.stroke(); ctx.setLineDash([])
+  }
+
+  // Upper envelope (blue-ish)
+  if(upper){
+    ctx.strokeStyle="rgba(100,180,255,0.3)"; ctx.lineWidth=1; ctx.setLineDash([3,3])
+    ctx.beginPath()
+    upper.forEach((v,i)=>{ i===0?ctx.moveTo(px(i),py(v)):ctx.lineTo(px(i),py(v)) })
+    ctx.stroke(); ctx.setLineDash([])
+  }
 
   // Spike markers
   for(const sp of spikes){
@@ -313,7 +359,8 @@ function onEnded(){
   statusMsg.textContent=""
 
   setTimeout(()=>{
-    const spikes=detectSpikes(signal)
+    const result=detectSpikes(signal)
+    const spikes=result.spikes
     const count=spikes.length
     repNum.textContent=count
     pill.textContent="✅ Done"
@@ -324,7 +371,7 @@ function onEnded(){
     doneBanner.style.display="block"
     resetBtn.style.display="block"
     graphBox.style.display="block"
-    setTimeout(()=>drawGraph(spikes),100)
+    setTimeout(()=>drawGraph(spikes, result.lower, result.upper, result.norm, result.w),100)
   }, 200)
 }
 
