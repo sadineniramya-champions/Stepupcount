@@ -106,12 +106,12 @@ button{font-family:inherit;cursor:pointer}
 
   <div class="graph-box" id="graphBox">
     <div class="graph-title">
-      AVG ANKLE Y — FULL VIDEO
+      LEFT ANKLE Y — FULL VIDEO
       <span id="graphFrames">0 frames</span>
     </div>
     <canvas id="graphCanvas" height="180"></canvas>
     <div class="graph-legend">
-      <div class="leg-item"><div class="leg-dot" style="background:#00FF96"></div>Avg ankle Y (smoothed)</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#00FF96"></div>Left ankle Y (smoothed)</div>
       <div class="leg-item"><div class="leg-dot" style="background:#FFD700"></div>Baseline</div>
       <div class="leg-item"><div class="leg-dot" style="background:#FF6B6B"></div>HIGH threshold</div>
       <div class="leg-item"><div class="leg-dot" style="background:#444;border:1px solid #666"></div>Count event</div>
@@ -279,7 +279,7 @@ function frame(){
     const lms=r&&r.landmarks&&r.landmarks[0]
     if(!lms){raf=requestAnimationFrame(frame);return}
 
-    const avgAnkle=(lms[27].y+lms[28].y)/2
+    const avgAnkle=lms[27].y
     if(smoothedAnkle===null)smoothedAnkle=avgAnkle
     smoothedAnkle=smoothedAnkle*(1-SMOOTH)+avgAnkle*SMOOTH
     if(baseline===null)baseline=smoothedAnkle
