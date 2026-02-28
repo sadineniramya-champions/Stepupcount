@@ -47,7 +47,7 @@ button{font-family:inherit;cursor:pointer}
 .card{background:#10101A;border:1px solid #1E1E30;border-radius:12px;padding:14px}
 .card-label{font-size:10px;letter-spacing:2.5px;color:#555;margin-bottom:5px}
 .card-val{font-size:22px;font-weight:bold;margin-bottom:3px}
-.card-hint{font-size:10px;color:#333}
+.card-hint{font-size:10px;color:#333;line-height:14px}
 .info{background:#0C0C14;border:1px solid #1A1A28;border-radius:12px;padding:16px;margin-bottom:12px}
 .info-title{font-size:10px;letter-spacing:3px;color:#444;margin-bottom:10px}
 .info-body{font-size:12px;color:#555;line-height:20px;margin-bottom:12px}
@@ -107,19 +107,21 @@ button{font-family:inherit;cursor:pointer}
         <div class="card-hint" id="stateHint">Waiting...</div>
       </div>
       <div class="card">
-        <div class="card-label">KNEE ANGLE</div>
+        <div class="card-label">FOOT HEIGHT</div>
         <div class="card-val" id="angleVal" style="color:#FFD700">--</div>
-        <div class="card-hint">UP &gt;160° · DOWN &lt;130°</div>
+        <div class="card-hint">Relative to hips · higher = on step</div>
       </div>
     </div>
   </div>
 
   <div class="info">
     <div class="info-title">HOW IT WORKS</div>
-    <div class="info-body">MediaPipe tracks 33 body landmarks. Hip, knee and ankle angles detect position. A DOWN to UP cycle counts as one rep.</div>
-    <div class="legend-row"><span class="dot" style="background:#00FF96"></span><span class="legend-txt">Legs straight = UP</span></div>
-    <div class="legend-row"><span class="dot" style="background:#FF6B6B"></span><span class="legend-txt">Knee bent = DOWN</span></div>
-    <div class="legend-row"><span class="dot" style="background:#fff"></span><span class="legend-txt">DOWN to UP = +1 rep</span></div>
+    <div class="info-body">Tracks both ankle heights relative to hips. When both feet rise together the person is ON the step. Full cycle counts as one rep.</div>
+    <div class="legend-row"><span class="dot" style="background:#555"></span><span class="legend-txt">Both feet on ground = GROUNDED</span></div>
+    <div class="legend-row"><span class="dot" style="background:#FFD700"></span><span class="legend-txt">One foot rising = ASCENDING</span></div>
+    <div class="legend-row"><span class="dot" style="background:#00FF96"></span><span class="legend-txt">Both feet elevated = ON STEP</span></div>
+    <div class="legend-row"><span class="dot" style="background:#FF6B6B"></span><span class="legend-txt">Descending back down</span></div>
+    <div class="legend-row"><span class="dot" style="background:#fff"></span><span class="legend-txt">ON STEP + back to GROUNDED = +1 rep</span></div>
   </div>
 
 <button class="reset-btn" id="resetBtn" onclick="resetAll()">↺  Reset Counter</button>
@@ -130,7 +132,12 @@ button{font-family:inherit;cursor:pointer}
 <script type="module">
 const CDN = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14"
 const MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
-const AU=145, AD=145
+
+// Threshold: how much higher ankles must be relative to hips to count as ON STEP
+// In MediaPipe coords Y increases downward, so ankle Y < hip Y means foot is higher
+// ELEVATED_THRESH: ankle is this much ABOVE hip (negative Y difference)
+const ELEVATED = 0.08   // ankle is 8% of frame height above hip = on step
+const GROUNDED = 0.02   // ankle is within 2% of hip height = on ground
 
 const vid=document.getElementById("vid")
 const cv=document.getElementById("cv")
@@ -145,23 +152,30 @@ const chooseBtn=document.getElementById("chooseBtn")
 const resetBtn=document.getElementById("resetBtn")
 const empty=document.getElementById("empty")
 
-let lmk=null, raf=null, lastT=-1, poseState="UP", pending=false, count=0
+let lmk=null, raf=null, lastT=-1, phase="GROUNDED", pending=false, count=0
 
-function ang(A,B,C){
-  const bx=A.x-B.x,by=A.y-B.y,cx=C.x-B.x,cy=C.y-B.y
-  const m=Math.hypot(bx,by)*Math.hypot(cx,cy)
-  return m?Math.acos(Math.max(-1,Math.min(1,(bx*cx+by*cy)/m)))*180/Math.PI:0
+// Returns how high each ankle is relative to hip (positive = ankle ABOVE hip)
+// In MediaPipe Y coords: smaller Y = higher on screen
+// So hipY - ankleY > 0 means ankle is above hip
+function footRise(lms){
+  const lHip=lms[23], lAnkle=lms[27]
+  const rHip=lms[24], rAnkle=lms[28]
+  const leftRise  = lHip.y - lAnkle.y   // positive = left foot elevated
+  const rightRise = rHip.y - rAnkle.y   // positive = right foot elevated
+  return { leftRise, rightRise, avgRise: (leftRise+rightRise)/2 }
 }
 
-function getState(lms){
+function getPhase(lms){
   if(!lms||lms.length<33)return null
-  const l=ang(lms[23],lms[25],lms[27])
-  if(l>AU)return"UP"
-  if(l<AD)return"DOWN"
-  return"MID"
+  const{leftRise,rightRise}=footRise(lms)
+  const bothUp   = leftRise>ELEVATED && rightRise>ELEVATED
+  const bothDown = leftRise<GROUNDED && rightRise<GROUNDED
+  if(bothUp)  return"ON_STEP"
+  if(bothDown)return"GROUNDED"
+  return"MOVING"
 }
 
-const LEGS=[[23,25],[25,27],[27,29],[27,31],[24,26],[26,28],[28,30],[28,32],[23,24]]
+const LEGS=[[23,25],[25,27],[24,26],[26,28],[23,24],[27,28]]
 const KP=[23,24,25,26,27,28]
 
 function draw(sets){
@@ -171,7 +185,9 @@ function draw(sets){
   ctx.clearRect(0,0,cv.width,cv.height)
   if(!sets||!sets.length)return
   const lms=sets[0],W=cv.width,H=cv.height
-  ctx.strokeStyle="rgba(0,255,150,0.9)";ctx.lineWidth=3
+  // Color bones based on phase
+  const boneColor = phase==="ON_STEP"?"rgba(0,255,150,0.9)":phase==="GROUNDED"?"rgba(100,100,150,0.7)":"rgba(255,215,0,0.8)"
+  ctx.strokeStyle=boneColor;ctx.lineWidth=3
   for(const[a,b]of LEGS){
     if(!lms[a]||!lms[b])continue
     ctx.beginPath();ctx.moveTo(lms[a].x*W,lms[a].y*H);ctx.lineTo(lms[b].x*W,lms[b].y*H);ctx.stroke()
@@ -179,8 +195,17 @@ function draw(sets){
   for(const i of KP){
     if(!lms[i])continue
     ctx.beginPath();ctx.arc(lms[i].x*W,lms[i].y*H,6,0,Math.PI*2)
-    ctx.fillStyle=i<=24?"#FF6B6B":"#00FF96";ctx.fill()
+    // Ankles glow brighter to show foot height tracking
+    ctx.fillStyle=i>=27?"#FFD700":i<=24?"#FF6B6B":"#00FF96"
+    ctx.fill()
   }
+}
+
+function updateUI(p, avg){
+  stateVal.textContent=p==="ON_STEP"?"ON STEP":p==="GROUNDED"?"GROUNDED":p==="MOVING"?"MOVING":"--"
+  stateVal.style.color=p==="ON_STEP"?"#00FF96":p==="GROUNDED"?"#888":p==="MOVING"?"#FFD700":"#444"
+  stateHint.textContent=p==="ON_STEP"?"Both feet on step!":p==="GROUNDED"?"Both feet on ground":p==="MOVING"?"Feet transitioning...":"Waiting..."
+  if(avg!==null) angleVal.textContent=(avg*100).toFixed(1)+"%"
 }
 
 function frame(){
@@ -193,24 +218,26 @@ function frame(){
     const lms=r&&r.landmarks&&r.landmarks[0]
     draw(r?r.landmarks:[])
     if(lms){
-      const l=ang(lms[23],lms[25],lms[27])
-      angleVal.textContent=l.toFixed(1)+"°"
-      const s=getState(lms)
-      updateState(s||"MID")
-      if(s==="DOWN"&&poseState==="UP"){poseState="DOWN";pending=true}
-      else if(s==="UP"&&poseState==="DOWN"&&pending){
-        poseState="UP";pending=false;count++;repNum.textContent=count
+      const{avgRise}=footRise(lms)
+      const p=getPhase(lms)
+      updateUI(p, avgRise)
+
+      // State machine: GROUNDED -> ON_STEP -> GROUNDED = +1 rep
+      if(p==="ON_STEP" && phase==="GROUNDED"){
+        phase="ON_STEP"
+        pending=true
+      } else if(p==="GROUNDED" && phase==="ON_STEP" && pending){
+        phase="GROUNDED"
+        pending=false
+        count++
+        repNum.textContent=count
         resetBtn.style.display="block"
+      } else if(p==="GROUNDED"){
+        phase="GROUNDED"
       }
     }
   }catch(e){}
   raf=requestAnimationFrame(frame)
-}
-
-function updateState(s){
-  stateVal.textContent=s
-  stateVal.style.color=s==="UP"?"#00FF96":s==="DOWN"?"#FF6B6B":s==="MID"?"#FFD700":"#444"
-  stateHint.textContent=s==="UP"?"Top of rep":s==="DOWN"?"Step engaged":s==="MID"?"Mid-movement":"Waiting..."
 }
 
 function onEnded(){
@@ -223,9 +250,9 @@ function onEnded(){
 
 window.resetAll=function(){
   cancelAnimationFrame(raf)
-  count=0;poseState="UP";pending=false;lastT=-1
+  count=0;phase="GROUNDED";pending=false;lastT=-1
   repNum.textContent="0"
-  updateState("--")
+  updateUI("--", null)
   angleVal.textContent="--"
   doneBanner.style.display="none"
   resetBtn.style.display="none"
@@ -236,23 +263,20 @@ window.resetAll=function(){
 document.getElementById("fileIn").addEventListener("change",function(e){
   const f=e.target.files&&e.target.files[0];if(!f)return
   cancelAnimationFrame(raf)
-  count=0;poseState="UP";pending=false;lastT=-1
+  count=0;phase="GROUNDED";pending=false;lastT=-1
   repNum.textContent="0"
-  updateState("--")
+  updateUI("--", null)
   angleVal.textContent="--"
   doneBanner.style.display="none"
   resetBtn.style.display="none"
-  // Show video, hide empty state
   empty.style.display="none"
   vid.style.display="block"
   cv.style.display="block"
-  // Set source and load
-  const url=URL.createObjectURL(f)
-  vid.src=url
+  vid.src=URL.createObjectURL(f)
   vid.load()
   pill.textContent="✅ Ready"
   statusMsg.textContent="Video loaded — press play!"
-  setTimeout(()=>{ statusMsg.textContent="" },3000)
+  setTimeout(()=>{statusMsg.textContent=""},3000)
 })
 
 vid.addEventListener("play",function(){
@@ -265,12 +289,7 @@ vid.addEventListener("pause",function(){
   cancelAnimationFrame(raf)
   pill.textContent="✅ Ready"
 })
-vid.addEventListener("error",function(){
-  statusMsg.textContent="Video error — try another file"
-  statusMsg.classList.add("err")
-})
 
-// Load MediaPipe
 ;(async()=>{
   try{
     statusMsg.textContent="Loading MediaPipe..."
