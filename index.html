@@ -111,8 +111,8 @@ button{font-family:inherit;cursor:pointer}
     <canvas id="graphCanvas" height="200"></canvas>
     <div class="graph-legend">
       <div class="leg-item"><div class="leg-dot" style="background:#00FF96"></div>Left ankle Y</div>
-      <div class="leg-item"><div class="leg-dot" style="background:#FF6B6B"></div>Spike (rep)</div>
-      <div class="leg-item"><div class="leg-dot" style="background:#FFD700"></div>Min threshold</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#FFD700"></div>Avg (mid) line</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#FF6B6B"></div>Spike crossing</div>
     </div>
   </div>
 
@@ -125,33 +125,127 @@ button{font-family:inherit;cursor:pointer}
 <script type="module">
 const CDN   = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14"
 const MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
-const SMOOTH = 0.15
+const SMOOTH     = 0.15
+const RESET_FRAMES = 30   // recalibrate every 30 frames after a boundary hit
 
-const vid       = document.getElementById("vid")
-const cv        = document.getElementById("cv")
-const pill      = document.getElementById("pill")
-const statusMsg = document.getElementById("statusMsg")
-const repNum    = document.getElementById("repNum")
-const stateVal  = document.getElementById("stateVal")
-const stateHint = document.getElementById("stateHint")
-const doneBanner= document.getElementById("doneBanner")
-const chooseBtn = document.getElementById("chooseBtn")
-const resetBtn  = document.getElementById("resetBtn")
-const exportBtn = document.getElementById("exportBtn")
-const empty     = document.getElementById("empty")
-const graphBox  = document.getElementById("graphBox")
-const graphCanvas=document.getElementById("graphCanvas")
-const graphInfo = document.getElementById("graphInfo")
+const vid        = document.getElementById("vid")
+const cv         = document.getElementById("cv")
+const pill       = document.getElementById("pill")
+const statusMsg  = document.getElementById("statusMsg")
+const repNum     = document.getElementById("repNum")
+const stateVal   = document.getElementById("stateVal")
+const stateHint  = document.getElementById("stateHint")
+const doneBanner = document.getElementById("doneBanner")
+const chooseBtn  = document.getElementById("chooseBtn")
+const resetBtn   = document.getElementById("resetBtn")
+const exportBtn  = document.getElementById("exportBtn")
+const empty      = document.getElementById("empty")
+const graphBox   = document.getElementById("graphBox")
+const graphCanvas= document.getElementById("graphCanvas")
+const graphInfo  = document.getElementById("graphInfo")
 
-let lmk=null, raf=null, lastT=-1
-let smoothed=null
-let signal=[]   // {t, y} per frame — raw smoothed left ankle Y
+let lmk=null, raf=null, lastT=-1, smoothed=null
+let signal=[]  // {t, y, avg, spike} per frame
 
-// ── Export to CSV (opens in Excel) ───────────────────────────
+// ── Core spike logic ──────────────────────────────────────────
+// Logic:
+// 1. Use first 1 sec of frames to set absLow, absHigh, avg
+// 2. avg = (absLow + absHigh) / 2
+// 3. Every time signal crosses avg (from below to above) = spike
+// 4. If value > absHigh + avg  → reset using next 30 frames
+// 5. If value < absLow - avg   → reset using next 30 frames
+function analyseSignal(signal){
+  if(signal.length<10) return {spikes:[], annotated:[]}
+
+  const vals = signal.map(s=>s.y)
+  const times = signal.map(s=>s.t)
+
+  // Estimate fps from signal
+  const fps = vals.length / (times[times.length-1] - times[0] + 0.001)
+  const oneSecFrames = Math.max(10, Math.round(fps))
+
+  // Calibrate from first 1 second
+  function calibrate(startIdx, numFrames){
+    const chunk = vals.slice(startIdx, startIdx + numFrames)
+    if(!chunk.length) return null
+    const lo = Math.min(...chunk)
+    const hi = Math.max(...chunk)
+    const av = (lo + hi) / 2
+    return {lo, hi, av}
+  }
+
+  let cal = calibrate(0, oneSecFrames)
+  if(!cal) return {spikes:[], annotated:[]}
+
+  let {lo: absLow, hi: absHigh, av: avg} = cal
+
+  const annotated = []  // {t, y, avg, absLow, absHigh, spike}
+  const spikes = []
+
+  let wasBelow = vals[0] < avg   // track crossing direction
+  let recalibratingFrom = -1     // index to start recalibration window
+
+  for(let i=0; i<vals.length; i++){
+    const v = vals[i]
+    let isSpike = false
+
+    // Check if we need to finish a recalibration
+    if(recalibratingFrom >= 0 && i >= recalibratingFrom + RESET_FRAMES){
+      const newCal = calibrate(recalibratingFrom, RESET_FRAMES)
+      if(newCal){ absLow=newCal.lo; absHigh=newCal.hi; avg=newCal.av }
+      recalibratingFrom = -1
+      wasBelow = v < avg
+    }
+
+    // Check boundary triggers (only when not already recalibrating)
+    if(recalibratingFrom < 0){
+      if(v > absHigh + avg){
+        // Value crossed absHigh + avg → schedule recalibration
+        recalibratingFrom = i + 1
+      } else if(v < absLow - avg){
+        // Value crossed absLow - avg → schedule recalibration
+        recalibratingFrom = i + 1
+      }
+    }
+
+    // Spike detection: every time signal crosses avg from below to above
+    const isAbove = v > avg
+    if(isAbove && wasBelow){
+      isSpike = true
+      spikes.push({i, t: times[i], y: v})
+    }
+    wasBelow = !isAbove
+
+    annotated.push({t: times[i], y: v, avg, absLow, absHigh, spike: isSpike})
+  }
+
+  return {spikes, annotated}
+}
+
+// ── Export to CSV ─────────────────────────────────────────────
 window.exportCSV = function(){
   if(!signal.length) return
-  const rows=["Frame,Time (s),Left Ankle Y (smoothed)"]
-  signal.forEach((s,i)=>rows.push(i+","+s.t.toFixed(4)+","+s.y.toFixed(6)))
+  const {annotated, spikes} = analyseSignal(signal)
+  const totalSpikes = spikes.length
+
+  const rows=["Frame,Time (s),Left Ankle Y,Avg (mid),Abs Low,Abs High,Spike,Spike Count"]
+  let runningCount = 0
+  annotated.forEach((row, i)=>{
+    if(row.spike) runningCount++
+    rows.push([
+      i,
+      row.t.toFixed(4),
+      row.y.toFixed(6),
+      row.avg.toFixed(6),
+      row.absLow.toFixed(6),
+      row.absHigh.toFixed(6),
+      row.spike ? "1" : "",
+      row.spike ? runningCount : ""
+    ].join(","))
+  })
+  rows.push("")
+  rows.push("Total Spikes,"+totalSpikes)
+
   const blob=new Blob([rows.join("\n")],{type:"text/csv"})
   const a=document.createElement("a")
   a.href=URL.createObjectURL(blob)
@@ -159,94 +253,58 @@ window.exportCSV = function(){
   a.click()
 }
 
-// ── Spike detection (post-processing) ─────────────────────────
-function detectSpikes(signal, minGapFrames=30){
-  if(signal.length<10) return []
-
-  const vals = signal.map(s=>s.y)
-
-  const w = []
-  const WIN = 10
-  for(let i=0;i<vals.length;i++){
-    let sum=0,cnt=0
-    for(let j=Math.max(0,i-WIN);j<=Math.min(vals.length-1,i+WIN);j++){sum+=vals[j];cnt++}
-    w.push(sum/cnt)
-  }
-
-  const minima=[]
-  for(let i=1;i<w.length-1;i++){
-    if(w[i]<w[i-1] && w[i]<w[i+1]){
-      minima.push({i, y:w[i]})
-    }
-  }
-
-  if(!minima.length) return []
-
-  const spikes=[]
-  let i=0
-  while(i<minima.length){
-    const group=[minima[i]]
-    let j=i+1
-    while(j<minima.length && minima[j].i - minima[i].i < minGapFrames){
-      group.push(minima[j]); j++
-    }
-    const best=group.reduce((a,b)=>a.y<b.y?a:b)
-    spikes.push(best)
-    i=j
-  }
-
-  return spikes
-}
-
 // ── Draw graph ────────────────────────────────────────────────
-function drawGraph(spikes){
+function drawGraph(annotated, spikes){
   const W = graphCanvas.offsetWidth || 300
   graphCanvas.width = W
   graphCanvas.height = 200
-  const H=200
-  const pad={t:20,b:28,l:38,r:10}
-  const iW=W-pad.l-pad.r
-  const iH=H-pad.t-pad.b
-
+  const H=200, pad={t:20,b:28,l:38,r:10}
+  const iW=W-pad.l-pad.r, iH=H-pad.t-pad.b
   const ctx=graphCanvas.getContext("2d")
   ctx.fillStyle="#0C0C14"; ctx.fillRect(0,0,W,H)
 
-  const vals=signal.map(s=>s.y)
-  const times=signal.map(s=>s.t)
+  const vals=annotated.map(r=>r.y)
+  const avgs=annotated.map(r=>r.avg)
+  const times=annotated.map(r=>r.t)
   const minV=Math.min(...vals)-0.005
   const maxV=Math.max(...vals)+0.005
 
-  function px(i){ return pad.l+(i/(vals.length-1))*iW }
-  function py(v){ return pad.t+((v-minV)/(maxV-minV))*iH }
+  const px=i=>pad.l+(i/(vals.length-1))*iW
+  const py=v=>pad.t+((v-minV)/(maxV-minV))*iH
 
+  // Grid
   ctx.strokeStyle="#1A1A28"; ctx.lineWidth=1
   for(let g=0;g<=4;g++){
     const y=pad.t+(g/4)*iH
     ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(pad.l+iW,y);ctx.stroke()
-    const val=maxV-((g/4)*(maxV-minV))
     ctx.fillStyle="#333";ctx.font="9px Courier New";ctx.textAlign="right"
-    ctx.fillText(val.toFixed(3),pad.l-3,y+3)
+    ctx.fillText((maxV-((g/4)*(maxV-minV))).toFixed(3),pad.l-3,y+3)
   }
 
+  // Avg line (yellow, adaptive)
+  ctx.strokeStyle="rgba(255,215,0,0.5)"; ctx.lineWidth=1; ctx.setLineDash([3,3])
+  ctx.beginPath()
+  avgs.forEach((v,i)=>i===0?ctx.moveTo(px(i),py(v)):ctx.lineTo(px(i),py(v)))
+  ctx.stroke(); ctx.setLineDash([])
+
+  // Signal line
   ctx.strokeStyle="#00FF96"; ctx.lineWidth=2
   ctx.beginPath()
-  vals.forEach((v,i)=>{ i===0?ctx.moveTo(px(i),py(v)):ctx.lineTo(px(i),py(v)) })
+  vals.forEach((v,i)=>i===0?ctx.moveTo(px(i),py(v)):ctx.lineTo(px(i),py(v)))
   ctx.stroke()
 
+  // Spike markers
   for(const sp of spikes){
     const x=px(sp.i), y=py(sp.y)
-    ctx.strokeStyle="rgba(255,107,107,0.4)"; ctx.lineWidth=1
+    ctx.strokeStyle="rgba(255,107,107,0.5)"; ctx.lineWidth=1
     ctx.beginPath();ctx.moveTo(x,pad.t);ctx.lineTo(x,pad.t+iH);ctx.stroke()
-    ctx.beginPath();ctx.arc(x,y,5,0,Math.PI*2)
+    ctx.beginPath();ctx.arc(x,y,4,0,Math.PI*2)
     ctx.fillStyle="#FF6B6B"; ctx.fill()
   }
 
   const totalT=times[times.length-1]||1
   ctx.fillStyle="#333";ctx.font="9px Courier New";ctx.textAlign="center"
-  for(let t=0;t<=4;t++){
-    const x=pad.l+(t/4)*iW
-    ctx.fillText(((t/4)*totalT).toFixed(0)+"s",x,H-6)
-  }
+  for(let t=0;t<=4;t++) ctx.fillText(((t/4)*totalT).toFixed(0)+"s",pad.l+(t/4)*iW,H-6)
 
   graphInfo.textContent=vals.length+" frames · "+totalT.toFixed(1)+"s · "+spikes.length+" spikes"
 }
@@ -295,26 +353,23 @@ function frame(){
 function onEnded(){
   cancelAnimationFrame(raf)
   pill.textContent="🔍 Counting..."
-  stateVal.textContent="COUNTING"
-  stateVal.style.color="#FFD700"
+  stateVal.textContent="COUNTING"; stateVal.style.color="#FFD700"
   stateHint.textContent="Analysing signal..."
   statusMsg.textContent=""
-
   setTimeout(()=>{
-    const spikes=detectSpikes(signal)
+    const {spikes, annotated} = analyseSignal(signal)
     const count=spikes.length
     repNum.textContent=count
     pill.textContent="✅ Done"
-    stateVal.textContent="DONE"
-    stateVal.style.color="#00FF96"
-    stateHint.textContent=count+" step-ups detected from signal"
+    stateVal.textContent="DONE"; stateVal.style.color="#00FF96"
+    stateHint.textContent=count+" step-ups detected"
     doneBanner.textContent="✅ "+count+" step-up"+(count!==1?"s":"")+" detected"
     doneBanner.style.display="block"
     exportBtn.style.display="block"
     resetBtn.style.display="block"
     graphBox.style.display="block"
-    setTimeout(()=>drawGraph(spikes),100)
-  }, 200)
+    setTimeout(()=>drawGraph(annotated, spikes),100)
+  },200)
 }
 
 window.resetAll=function(){
@@ -344,8 +399,7 @@ document.getElementById("fileIn").addEventListener("change",function(e){
   exportBtn.style.display="none"
   resetBtn.style.display="none"
   empty.style.display="none"
-  vid.style.display="block"
-  cv.style.display="block"
+  vid.style.display="block"; cv.style.display="block"
   vid.src=URL.createObjectURL(f); vid.load()
   pill.textContent="✅ Ready"
   statusMsg.textContent="Video loaded — press play!"
@@ -354,15 +408,13 @@ document.getElementById("fileIn").addEventListener("change",function(e){
 
 vid.addEventListener("play",function(){
   pill.textContent="▶ Recording..."
-  stateVal.textContent="RECORDING"
-  stateVal.style.color="#FFD700"
+  stateVal.textContent="RECORDING"; stateVal.style.color="#FFD700"
   stateHint.textContent="Recording ankle signal..."
   statusMsg.textContent=""; lastT=-1
   raf=requestAnimationFrame(frame)
 })
 vid.addEventListener("pause",function(){
-  cancelAnimationFrame(raf)
-  pill.textContent="✅ Ready"
+  cancelAnimationFrame(raf); pill.textContent="✅ Ready"
 })
 
 ;(async()=>{
