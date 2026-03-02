@@ -147,7 +147,7 @@ let signal=[]   // {t, y} per frame — raw smoothed left ankle Y
 // ── Spike detection (post-processing) ─────────────────────────
 // In MediaPipe Y coords: ankle ON STEP = smaller Y = dip in signal
 // So we find local MINIMA (dips) that are deep enough and far enough apart
-function detectSpikes(signal, minGapFrames=30){
+function detectSpikes(signal, minProminence=0.015){
   if(signal.length<10) return []
 
   const vals = signal.map(s=>s.y)
@@ -161,33 +161,45 @@ function detectSpikes(signal, minGapFrames=30){
     w.push(sum/cnt)
   }
 
-  // Find ALL local minima (every dip, no threshold)
+  // Find ALL local minima
   const minima=[]
   for(let i=1;i<w.length-1;i++){
     if(w[i]<w[i-1] && w[i]<w[i+1]){
       minima.push({i, y:w[i]})
     }
   }
-
   if(!minima.length) return []
 
-  // Only enforce minimum gap — pick the deepest minimum in each window
-  const spikes=[]
-  let i=0
-  while(i<minima.length){
-    // Collect all minima within the gap window
-    const group=[minima[i]]
-    let j=i+1
-    while(j<minima.length && minima[j].i - minima[i].i < minGapFrames){
-      group.push(minima[j]); j++
-    }
-    // Pick the deepest one in this group (smallest Y = highest on screen = most elevated)
-    const best=group.reduce((a,b)=>a.y<b.y?a:b)
-    spikes.push(best)
-    i=j
+  // Calculate prominence for each minimum
+  // Prominence = min(left_peak, right_peak) - dip_value
+  // Left peak = highest point between this dip and the previous dip
+  // Right peak = highest point between this dip and the next dip
+  function peakBetween(from, to){
+    let maxVal = -Infinity
+    for(let k=from; k<=to; k++) maxVal=Math.max(maxVal, w[k])
+    return maxVal
   }
 
-  return spikes
+  const prominent = []
+  for(let m=0; m<minima.length; m++){
+    const cur = minima[m]
+    // Left boundary: previous minimum or start
+    const leftBound  = m>0 ? minima[m-1].i : 0
+    // Right boundary: next minimum or end
+    const rightBound = m<minima.length-1 ? minima[m+1].i : w.length-1
+
+    const leftPeak  = peakBetween(leftBound, cur.i)
+    const rightPeak = peakBetween(cur.i, rightBound)
+
+    // Prominence = how much lower the dip is vs the shorter surrounding peak
+    const prominence = Math.min(leftPeak, rightPeak) - cur.y
+
+    if(prominence >= minProminence){
+      prominent.push({...cur, prominence})
+    }
+  }
+
+  return prominent
 }
 
 // ── Draw graph ────────────────────────────────────────────────
