@@ -174,34 +174,27 @@ function analyseSignal(signal){
     return {lo, hi, av}
   }
 
-  let cal = calibrate(0, oneSecFrames)
+  let cal = calibrate(0, RESET_FRAMES)
   if(!cal) return {spikes:[], annotated:[]}
 
   let {lo: absLow, hi: absHigh, av: avg} = cal
 
-  const annotated = []  // {t, y, avg, absLow, absHigh, spike}
+  const annotated = []
   const spikes = []
-
-  let wasBelow = vals[0] < avg   // track crossing direction
-  let recalibratingFrom = -1     // index to start recalibration window
+  let wasBelow = vals[0] < avg
 
   for(let i=0; i<vals.length; i++){
+    // Recalibrate at the START of every 30-frame window
+    if(i % RESET_FRAMES === 0){
+      const newCal = calibrate(i, RESET_FRAMES)
+      if(newCal){ absLow=newCal.lo; absHigh=newCal.hi; avg=newCal.av }
+      wasBelow = vals[i] < avg
+    }
+
     const v = vals[i]
     let isSpike = false
 
-    // Check boundary triggers (only when not already recalibrating)
-    if(recalibratingFrom < 0){
-      const halfRange = (absHigh - absLow) / 2
-      if(v > absHigh + halfRange || v < absLow - halfRange){
-        // Recalibrate immediately using next 30 frames from THIS frame
-        recalibratingFrom = i
-        const newCal = calibrate(i, RESET_FRAMES)
-        if(newCal){ absLow=newCal.lo; absHigh=newCal.hi; avg=newCal.av }
-        wasBelow = v < avg
-      }
-    }
-
-    // Spike detection: every time signal crosses avg from below to above
+    // Spike: signal crosses avg from below to above
     const isAbove = v > avg
     if(isAbove && wasBelow){
       isSpike = true
