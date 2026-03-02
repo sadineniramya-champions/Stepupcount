@@ -189,23 +189,15 @@ function analyseSignal(signal){
     const v = vals[i]
     let isSpike = false
 
-    // Check if we need to finish a recalibration
-    if(recalibratingFrom >= 0 && i >= recalibratingFrom + RESET_FRAMES){
-      const newCal = calibrate(recalibratingFrom, RESET_FRAMES)
-      if(newCal){ absLow=newCal.lo; absHigh=newCal.hi; avg=newCal.av }
-      recalibratingFrom = -1
-      wasBelow = v < avg
-    }
-
     // Check boundary triggers (only when not already recalibrating)
     if(recalibratingFrom < 0){
       const halfRange = (absHigh - absLow) / 2
-      if(v > absHigh + halfRange){
-        // Value crossed absHigh + halfRange → schedule recalibration
-        recalibratingFrom = i + 1
-      } else if(v < absLow - halfRange){
-        // Value crossed absLow - halfRange → schedule recalibration
-        recalibratingFrom = i + 1
+      if(v > absHigh + halfRange || v < absLow - halfRange){
+        // Recalibrate immediately using next 30 frames from THIS frame
+        recalibratingFrom = i
+        const newCal = calibrate(i, RESET_FRAMES)
+        if(newCal){ absLow=newCal.lo; absHigh=newCal.hi; avg=newCal.av }
+        wasBelow = v < avg
       }
     }
 
