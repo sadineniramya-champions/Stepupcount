@@ -243,12 +243,13 @@ function detectSpikes(signal){
 }
 
 // ── Draw graph ────────────────────────────────────────────────
-function drawGraph(spikes){
-  const W=graphCanvas.offsetWidth||300
-  graphCanvas.width=W; graphCanvas.height=200
+function drawGraphToCanvas(targetCanvas, spikes){
+  spikes=spikes||[]
+  const W=targetCanvas.offsetWidth||800
+  targetCanvas.width=W; targetCanvas.height=200
   const H=200, pad={t:20,b:28,l:38,r:10}
   const iW=W-pad.l-pad.r, iH=H-pad.t-pad.b
-  const ctx=graphCanvas.getContext("2d")
+  const ctx=targetCanvas.getContext("2d")
   ctx.fillStyle="#0C0C14"; ctx.fillRect(0,0,W,H)
   const vals=signal.map(s=>s.y)
   const times=signal.map(s=>s.t)
@@ -279,24 +280,29 @@ function drawGraph(spikes){
   graphInfo.textContent=vals.length+" frames · "+totalT.toFixed(1)+"s · "+spikes.length+" spikes"
 }
 
+function drawGraph(spikes){ drawGraphToCanvas(graphCanvas, spikes) }
+
 // ── Events ────────────────────────────────────────────────────
 function onEnded(){
   cancelAnimationFrame(raf)
   pill.textContent="🔍 Counting..."
   stateVal.textContent="COUNTING"; stateVal.style.color="#FFD700"
   stateHint.textContent="Analysing signal..."
-  setTimeout(()=>{
-    const spikes=detectSpikes(signal)
-    const count=spikes.length
+  setTimeout(async()=>{
+    // First draw the graph with no spike markers
+    graphBox.style.display="block"
+    drawGraph([])
+    // Then detect spikes from the rendered graph image
+    const result = await detectSpikesFromImage()
+    const count = result.total
     repNum.textContent=count
     pill.textContent="✅ Done"
     stateVal.textContent="DONE"; stateVal.style.color="#00FF96"
-    stateHint.textContent=count+" step-ups detected"
+    stateHint.textContent=count+" step-ups detected ("+result.upward+" up · "+result.downward+" down)"
     doneBanner.textContent="✅ "+count+" step-up"+(count!==1?"s":"")+" detected"
     doneBanner.style.display="block"
     resetBtn.style.display="block"
-    graphBox.style.display="block"
-    setTimeout(()=>drawGraph(spikes),100)
+    graphInfo.textContent=signal.length+" frames · "+result.upward+" peaks · "+result.downward+" troughs"
   },200)
 }
 
