@@ -21,10 +21,6 @@ button{font-family:inherit;cursor:pointer}
 .app-sub{font-size:10px;letter-spacing:1.5px;color:#555;margin-top:2px}
 .pill{font-size:11px;background:rgba(0,255,150,0.08);border:1px solid rgba(0,255,150,0.2);border-radius:20px;padding:5px 11px;color:#00FF96}
 .pill.err{color:#FF6B6B}
-.model-toggle{display:flex;gap:8px;margin-bottom:12px}
-.model-btn{flex:1;padding:10px 0;border-radius:10px;font-size:11px;font-weight:bold;letter-spacing:1.5px;border:1px solid #2A2A3A;background:transparent;color:#555;transition:all 0.2s}
-.model-btn.active{border-color:rgba(0,255,150,0.4);background:rgba(0,255,150,0.08);color:#00FF96}
-.model-desc{font-size:10px;color:#444;text-align:center;margin-bottom:12px;line-height:16px}
 .videobox{background:#10101A;border-radius:12px;border:1px solid #1E1E30;overflow:hidden;min-height:200px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;position:relative}
 #vid{width:100%;display:block;min-height:200px;background:#000}
 #cv{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
@@ -65,23 +61,11 @@ button{font-family:inherit;cursor:pointer}
       <span style="font-size:28px">⬆</span>
       <div>
         <div class="app-title">STEP-UP COUNTER</div>
-        <div class="app-sub">AI Rep Tracker · Pose Detection</div>
+        <div class="app-sub">AI Rep Tracker · MediaPipe Pose</div>
       </div>
     </div>
     <div class="pill" id="pill">⏳ Loading...</div>
   </div>
-
-  <!-- Model selector -->
-
-  <div class="model-toggle">
-    <button class="model-btn active" id="btnMediaPipe" onclick="selectModel('mediapipe')">
-      MEDIAPIPE
-    </button>
-    <button class="model-btn" id="btnMoveNet" onclick="selectModel('movenet')">
-      MOVENET
-    </button>
-  </div>
-  <div class="model-desc" id="modelDesc">MediaPipe Pose — 33 landmarks · accurate · slower</div>
 
   <div class="videobox">
     <div class="empty" id="empty">
@@ -131,10 +115,8 @@ button{font-family:inherit;cursor:pointer}
 
 <script type="module">
 // ── Constants ─────────────────────────────────────────────────
-const MP_CDN   = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14"
-const MP_MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
-const MN_CDN   = "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"
-const MN_MODEL = "https://tfhub.dev/google/tfjs-model/movenet/singlepose/lightning/4"
+const CDN      = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14"
+const MODEL    = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
 const SMOOTH    = 0.15
 const MIN_GAP   = 25
 const SMOOTH_WIN= 10
@@ -154,67 +136,26 @@ const empty      = document.getElementById("empty")
 const graphBox   = document.getElementById("graphBox")
 const graphCanvas= document.getElementById("graphCanvas")
 const graphInfo  = document.getElementById("graphInfo")
-const modelDesc  = document.getElementById("modelDesc")
 
 // ── State ─────────────────────────────────────────────────────
-let activeModel = "mediapipe"  // "mediapipe" | "movenet"
-let mpLandmarker = null
-let mnModel      = null
-let raf=null, lastT=-1, smoothed=null, signal=[]
-
-// ── Model selector ────────────────────────────────────────────
-window.selectModel = function(model){
-  if(activeModel===model) return
-  activeModel=model
-  document.getElementById("btnMediaPipe").classList.toggle("active", model==="mediapipe")
-  document.getElementById("btnMoveNet").classList.toggle("active", model==="movenet")
-  modelDesc.textContent = model==="mediapipe"
-    ? "MediaPipe Pose — 33 landmarks · accurate · slower"
-    : "MoveNet Lightning — 17 landmarks · fast · lightweight"
-  loadModel()
-}
+let lmk=null, raf=null, lastT=-1, smoothed=null, signal=[]
 
 // ── Load MediaPipe ────────────────────────────────────────────
-async function loadMediaPipe(){
-  statusMsg.textContent="Loading MediaPipe..."
-  pill.textContent="⏳ Loading..."
-  chooseBtn.disabled=true
-  const{PoseLandmarker,FilesetResolver}=await import(MP_CDN+"/vision_bundle.mjs")
-  statusMsg.textContent="Downloading model (~10MB)..."
-  const res=await FilesetResolver.forVisionTasks(MP_CDN+"/wasm")
-  mpLandmarker=await PoseLandmarker.createFromOptions(res,{
-    baseOptions:{modelAssetPath:MP_MODEL,delegate:"CPU"},
-    runningMode:"VIDEO",numPoses:1
-  })
-  pill.textContent="✅ Ready"
-  statusMsg.textContent=""
-  chooseBtn.disabled=false
-}
-
-// ── Load MoveNet ──────────────────────────────────────────────
-async function loadMoveNet(){
-  statusMsg.textContent="Loading TensorFlow.js..."
-  pill.textContent="⏳ Loading..."
-  chooseBtn.disabled=true
-  // Load TF.js dynamically
-  await new Promise((res,rej)=>{
-    if(window.tf){res();return}
-    const s=document.createElement("script")
-    s.src=MN_CDN; s.onload=res; s.onerror=rej
-    document.head.appendChild(s)
-  })
-  statusMsg.textContent="Loading MoveNet model..."
-  await window.tf.ready()
-  mnModel=await window.tf.loadGraphModel(MN_MODEL,{fromTFHub:true})
-  pill.textContent="✅ Ready"
-  statusMsg.textContent=""
-  chooseBtn.disabled=false
-}
-
 async function loadModel(){
   try{
-    if(activeModel==="mediapipe") await loadMediaPipe()
-    else await loadMoveNet()
+    statusMsg.textContent="Loading MediaPipe..."
+    pill.textContent="⏳ Loading..."
+    chooseBtn.disabled=true
+    const{PoseLandmarker,FilesetResolver}=await import(CDN+"/vision_bundle.mjs")
+    statusMsg.textContent="Downloading model (~10MB)..."
+    const res=await FilesetResolver.forVisionTasks(CDN+"/wasm")
+    lmk=await PoseLandmarker.createFromOptions(res,{
+      baseOptions:{modelAssetPath:MODEL,delegate:"CPU"},
+      runningMode:"VIDEO",numPoses:1
+    })
+    pill.textContent="✅ Ready"
+    statusMsg.textContent=""
+    chooseBtn.disabled=false
   }catch(e){
     pill.textContent="❌ Error"
     pill.classList.add("err")
@@ -222,20 +163,7 @@ async function loadModel(){
   }
 }
 
-// ── Get left ankle Y from each model ─────────────────────────
-function getAnkleY_MediaPipe(lms){
-  // landmark 27 = left ankle
-  return lms[27] ? lms[27].y : null
-}
-
-function getAnkleY_MoveNet(keypoints){
-  // MoveNet keypoint 15 = left ankle
-  const ankle = keypoints[15]
-  if(!ankle||ankle.score<0.3) return null
-  return ankle.y  // MoveNet returns normalised 0-1
-}
-
-// ── Skeleton draw — MediaPipe ─────────────────────────────────
+// ── Skeleton draw ────────────────────────────────────────────
 const MP_BONES=[[23,25],[25,27],[24,26],[26,28],[23,24]]
 const MP_KP=[23,24,25,26,27,28]
 function drawMediaPipe(lms){
@@ -253,66 +181,22 @@ function drawMediaPipe(lms){
   }
 }
 
-// ── Skeleton draw — MoveNet ───────────────────────────────────
-// MoveNet 17 keypoints: 0=nose,5=lShoulder,6=rShoulder,7=lElbow,8=rElbow
-// 9=lWrist,10=rWrist,11=lHip,12=rHip,13=lKnee,14=rKnee,15=lAnkle,16=rAnkle
-const MN_BONES=[[11,13],[13,15],[12,14],[14,16],[11,12]]
-function drawMoveNet(keypoints){
-  const W=cv.width,H=cv.height
-  const ctx=cv.getContext("2d")
-  ctx.strokeStyle="rgba(255,215,0,0.8)"; ctx.lineWidth=3
-  for(const[a,b]of MN_BONES){
-    const kA=keypoints[a],kB=keypoints[b]
-    if(!kA||!kB||kA.score<0.3||kB.score<0.3) continue
-    ctx.beginPath();ctx.moveTo(kA.x*W,kA.y*H);ctx.lineTo(kB.x*W,kB.y*H);ctx.stroke()
-  }
-  for(const i of[11,12,13,14,15,16]){
-    const k=keypoints[i]; if(!k||k.score<0.3) continue
-    ctx.beginPath();ctx.arc(k.x*W,k.y*H,7,0,Math.PI*2)
-    ctx.fillStyle=i===15?"#00FF96":i<=12?"#FF6B6B":"#FFD700"; ctx.fill()
-  }
-}
-
 // ── Main frame loop ───────────────────────────────────────────
-async function frame(){
-  if(!vid) return
+function frame(){
+  if(!vid||!lmk) return
   if(vid.paused||vid.ended){if(vid.ended)onEnded();return}
   if(vid.currentTime===lastT){raf=requestAnimationFrame(frame);return}
   lastT=vid.currentTime
-
-  if(!vid.videoWidth){raf=requestAnimationFrame(frame);return}
-  cv.width=vid.videoWidth; cv.height=vid.videoHeight
-  const ctx=cv.getContext("2d"); ctx.clearRect(0,0,cv.width,cv.height)
-
   try{
-    let ankleY=null
-    if(activeModel==="mediapipe"&&mpLandmarker){
-      const r=mpLandmarker.detectForVideo(vid,performance.now())
-      const lms=r&&r.landmarks&&r.landmarks[0]
-      if(lms){ drawMediaPipe(lms); ankleY=getAnkleY_MediaPipe(lms) }
-    } else if(activeModel==="movenet"&&mnModel){
-      // MoveNet expects 192x192 input
-      const tensor=window.tf.tidy(()=>{
-        return window.tf.image.resizeBilinear(
-          window.tf.browser.fromPixels(vid),[192,192]
-        ).expandDims(0).cast("int32")
-      })
-      const result=await mnModel.predict(tensor)
-      tensor.dispose()
-      const data=await result.data()
-      result.dispose()
-      // MoveNet output: [1,1,17,3] → [y,x,score] per keypoint
-      const keypoints=[]
-      for(let i=0;i<17;i++){
-        keypoints.push({y:data[i*3],x:data[i*3+1],score:data[i*3+2]})
-      }
-      drawMoveNet(keypoints)
-      ankleY=getAnkleY_MoveNet(keypoints)
-    }
-
-    if(ankleY!==null){
-      if(smoothed===null) smoothed=ankleY
-      smoothed=smoothed*(1-SMOOTH)+ankleY*SMOOTH
+    const r=lmk.detectForVideo(vid,performance.now())
+    const lms=r&&r.landmarks&&r.landmarks[0]
+    if(!vid.videoWidth){raf=requestAnimationFrame(frame);return}
+    cv.width=vid.videoWidth; cv.height=vid.videoHeight
+    cv.getContext("2d").clearRect(0,0,cv.width,cv.height)
+    if(lms){
+      drawMediaPipe(lms)
+      if(smoothed===null) smoothed=lms[27].y
+      smoothed=smoothed*(1-SMOOTH)+lms[27].y*SMOOTH
       signal.push({t:vid.currentTime, y:smoothed})
     }
   }catch(e){}
