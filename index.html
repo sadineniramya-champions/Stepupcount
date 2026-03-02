@@ -204,26 +204,51 @@ function frame(){
 }
 
 // ── Spike detection ───────────────────────────────────────────
+// Ankle Y in MediaPipe: foot ON STEP = smaller Y = local MINIMUM numerically
+// = visually appears as a DIP going DOWN on graph (foot rising up)
+// So we find local minima = foot elevated = one rep
 function detectSpikes(signal){
   if(signal.length<10) return []
   const vals=signal.map(s=>s.y)
+
+  // Smooth signal to remove frame noise
   const w=[]
   for(let i=0;i<vals.length;i++){
     let sum=0,cnt=0
     for(let j=Math.max(0,i-SMOOTH_WIN);j<=Math.min(vals.length-1,i+SMOOTH_WIN);j++){sum+=vals[j];cnt++}
     w.push(sum/cnt)
   }
-  const minima=[]
+
+  // Detect direction: does foot-up = smaller Y (minima) or larger Y (maxima)?
+  // Compare first 10% of signal (standing) vs overall minimum
+  const firstChunk=w.slice(0, Math.floor(w.length*0.1))
+  const baseline=firstChunk.reduce((a,b)=>a+b,0)/firstChunk.length
+  const globalMin=Math.min(...w)
+  const globalMax=Math.max(...w)
+  // If signal goes significantly lower than baseline = minima = foot up
+  // If signal goes significantly higher = maxima = foot up (inverted camera)
+  const goesDown=(baseline-globalMin)>(globalMax-baseline)
+  const isPeak= goesDown
+    ? (a,b,c)=>b<a&&b<c   // local minimum
+    : (a,b,c)=>b>a&&b>c   // local maximum
+
+  const extrema=[]
   for(let i=1;i<w.length-1;i++){
-    if(w[i]<w[i-1]&&w[i]<w[i+1]) minima.push({i,y:w[i]})
+    if(isPeak(w[i-1],w[i],w[i+1])) extrema.push({i, y:w[i]})
   }
+
+  // Group by MIN_GAP, pick deepest (or highest) in each group
   const spikes=[]
   let i=0
-  while(i<minima.length){
-    const group=[minima[i]]
+  while(i<extrema.length){
+    const group=[extrema[i]]
     let j=i+1
-    while(j<minima.length&&minima[j].i-minima[i].i<MIN_GAP){group.push(minima[j]);j++}
-    spikes.push(group.reduce((a,b)=>a.y<b.y?a:b))
+    while(j<extrema.length&&extrema[j].i-extrema[i].i<MIN_GAP){group.push(extrema[j]);j++}
+    // Pick the most extreme point in the group
+    const best=goesDown
+      ? group.reduce((a,b)=>a.y<b.y?a:b)   // smallest Y = highest foot
+      : group.reduce((a,b)=>a.y>b.y?a:b)   // largest Y = highest foot
+    spikes.push(best)
     i=j
   }
   return spikes
