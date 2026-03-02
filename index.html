@@ -138,7 +138,7 @@ const graphCanvas= document.getElementById("graphCanvas")
 const graphInfo  = document.getElementById("graphInfo")
 
 // ── State ─────────────────────────────────────────────────────
-let lmk=null, raf=null, lastT=-1, smoothed=null, signal=[]
+let lmk=null, raf=null, lastT=-1, smoothed=null, signal=[], frameCount=0
 
 // ── Load MediaPipe ────────────────────────────────────────────
 async function loadModel(){
@@ -187,6 +187,8 @@ function frame(){
   if(vid.paused||vid.ended){if(vid.ended)onEnded();return}
   if(vid.currentTime===lastT){raf=requestAnimationFrame(frame);return}
   lastT=vid.currentTime
+  frameCount++
+  if(frameCount%5!==0){raf=requestAnimationFrame(frame);return}
   try{
     const r=lmk.detectForVideo(vid,performance.now())
     const lms=r&&r.landmarks&&r.landmarks[0]
@@ -203,28 +205,39 @@ function frame(){
   raf=requestAnimationFrame(frame)
 }
 
-// ── Spike detection ───────────────────────────────────────────
+// ── Spike detection (derivative zero-crossing) ───────────────
+// Port of Python logic: smooth → derivative → find + to - crossings
 function detectSpikes(signal){
   if(signal.length<10) return []
   const vals=signal.map(s=>s.y)
+
+  // Step 1: Smooth signal (moving average, window=5)
+  const WIN=5
   const w=[]
   for(let i=0;i<vals.length;i++){
     let sum=0,cnt=0
-    for(let j=Math.max(0,i-SMOOTH_WIN);j<=Math.min(vals.length-1,i+SMOOTH_WIN);j++){sum+=vals[j];cnt++}
+    for(let j=Math.max(0,i-WIN);j<=Math.min(vals.length-1,i+WIN);j++){sum+=vals[j];cnt++}
     w.push(sum/cnt)
   }
-  const minima=[]
-  for(let i=1;i<w.length-1;i++){
-    if(w[i]<w[i-1]&&w[i]<w[i+1]) minima.push({i,y:w[i]})
-  }
+
+  // Step 2: Compute derivative (velocity)
+  const vel=[]
+  for(let i=1;i<w.length;i++) vel.push(w[i]-w[i-1])
+
+  // Step 3: Detect zero crossings from + to - (peak in signal)
+  // In MediaPipe Y: foot rising = Y getting smaller = signal going DOWN
+  // So a step-up peak = velocity goes from - to + (valley, not peak)
+  // We detect - to + crossings = bottom of dip = foot fully elevated
   const spikes=[]
-  let i=0
-  while(i<minima.length){
-    const group=[minima[i]]
-    let j=i+1
-    while(j<minima.length&&minima[j].i-minima[i].i<MIN_GAP){group.push(minima[j]);j++}
-    spikes.push(group.reduce((a,b)=>a.y<b.y?a:b))
-    i=j
+  let lastPeak=-MIN_GAP
+  for(let i=1;i<vel.length;i++){
+    // - to + crossing = local minimum (foot at highest point)
+    if(vel[i-1]<0 && vel[i]>=0){
+      if(i-lastPeak>=MIN_GAP){
+        spikes.push({i, y:w[i]})
+        lastPeak=i
+      }
+    }
   }
   return spikes
 }
@@ -289,7 +302,7 @@ function onEnded(){
 
 function resetState(){
   cancelAnimationFrame(raf)
-  lastT=-1; smoothed=null; signal=[]
+  lastT=-1; smoothed=null; signal=[]; frameCount=0
   repNum.textContent="0"
   stateVal.textContent="--"; stateVal.style.color="#555"
   stateHint.textContent="Waiting for video..."
