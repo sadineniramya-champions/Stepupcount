@@ -199,11 +199,12 @@ function analyseSignal(signal){
 
     // Check boundary triggers (only when not already recalibrating)
     if(recalibratingFrom < 0){
-      if(v > absHigh + avg){
-        // Value crossed absHigh + avg → schedule recalibration
+      const halfRange = (absHigh - absLow) / 2
+      if(v > absHigh + halfRange){
+        // Value crossed absHigh + halfRange → schedule recalibration
         recalibratingFrom = i + 1
-      } else if(v < absLow - avg){
-        // Value crossed absLow - avg → schedule recalibration
+      } else if(v < absLow - halfRange){
+        // Value crossed absLow - halfRange → schedule recalibration
         recalibratingFrom = i + 1
       }
     }
