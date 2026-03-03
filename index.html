@@ -237,6 +237,7 @@ function analyseSignal(signal){
       }
     }
     wasBelow = !isAbove
+    if(isAbove) upCount++; else downCount++
 
     annotated.push({t: times[i], y: v, avg, absLow, absHigh, spike: isSpike})
   }
