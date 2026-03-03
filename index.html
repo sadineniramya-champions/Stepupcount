@@ -182,22 +182,20 @@ function analyseSignal(signal){
   const annotated = []
   const spikes = []
   let wasBelow = vals[0] < avg
+  let suppressNextSpike = false
 
   for(let i=0; i<vals.length; i++){
-    // Recalibrate at the START of every 20-frame window
+    // Recalibrate every 30 frames
     if(i % RESET_FRAMES === 0){
       const prevAvg = avg
       const newCal = calibrate(i, RESET_FRAMES)
       if(newCal){ absLow=newCal.lo; absHigh=newCal.hi; avg=newCal.av }
-      // If avg flipped from below current y to above current y,
-      // mark as already-above so the immediate next crossing is skipped
       const v = vals[i]
-      // If avg jumped UP past current y (was above old avg, now below new avg)
-      // → force wasBelow=true so the immediate next upward crossing is skipped
+      // avg jumped UP past current y → next crossing is false, suppress it
       if(v > prevAvg && v < avg){
         wasBelow = true
+        suppressNextSpike = true
       }
-      // Otherwise carry wasBelow naturally
     }
 
     const v = vals[i]
@@ -206,8 +204,12 @@ function analyseSignal(signal){
     // Spike: signal crosses avg from below to above
     const isAbove = v > avg
     if(isAbove && wasBelow){
-      isSpike = true
-      spikes.push({i, t: times[i], y: v})
+      if(suppressNextSpike){
+        suppressNextSpike = false  // skip this one only, next ones are fine
+      } else {
+        isSpike = true
+        spikes.push({i, t: times[i], y: v})
+      }
     }
     wasBelow = !isAbove
 
