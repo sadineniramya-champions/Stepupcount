@@ -186,9 +186,17 @@ function analyseSignal(signal){
   for(let i=0; i<vals.length; i++){
     // Recalibrate at the START of every 20-frame window
     if(i % RESET_FRAMES === 0){
+      const prevAvg = avg
       const newCal = calibrate(i, RESET_FRAMES)
       if(newCal){ absLow=newCal.lo; absHigh=newCal.hi; avg=newCal.av }
-      // Do NOT reset wasBelow here — carry it over so crossings aren't missed
+      // If avg flipped from below current y to above current y,
+      // mark as already-above so the immediate next crossing is skipped
+      const v = vals[i]
+      if(v > prevAvg && v < avg){
+        // Was above old avg, now below new avg → suppress next spike
+        wasBelow = false
+      }
+      // Otherwise carry wasBelow naturally
     }
 
     const v = vals[i]
