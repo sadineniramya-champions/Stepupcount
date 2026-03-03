@@ -190,8 +190,8 @@ function analyseSignal(signal){
       const prevAvg = avg
       const newCal = calibrate(i, RESET_FRAMES)
       if(newCal){ absLow=newCal.lo; absHigh=newCal.hi; avg=newCal.av }
-      const v = vals[i]
-      // avg jumped UP past current y → next crossing is false, suppress it
+      const v = i > 0 ? vals[i-1] : vals[i]
+      // avg jumped UP past prev y → next crossing is false, suppress it
       if(v > prevAvg && v < avg){
         wasBelow = true
         suppressNextSpike = true
