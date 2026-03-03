@@ -183,6 +183,7 @@ function analyseSignal(signal){
   const spikes = []
   let wasBelow = vals[0] < avg
   let suppressNextSpike = false
+  let consecutiveBelowCount = 0
 
   for(let i=0; i<vals.length; i++){
     // Recalibrate every 30 frames
@@ -195,17 +196,34 @@ function analyseSignal(signal){
       if(v > prevAvg && v < avg){
         wasBelow = true
         suppressNextSpike = true
+        consecutiveBelowCount = 0
       }
     }
 
     const v = vals[i]
     let isSpike = false
+    const isAbove = v > avg
+
+    // Track consecutive frames below avg to detect genuine dip
+    if(suppressNextSpike){
+      if(!isAbove){
+        consecutiveBelowCount++
+        // 3 consecutive frames below avg = genuine dip → cancel suppression
+        if(consecutiveBelowCount >= 3){
+          suppressNextSpike = false
+          consecutiveBelowCount = 0
+        }
+      } else {
+        // Reset count if it goes up (noise, not a genuine dip)
+        consecutiveBelowCount = 0
+      }
+    }
 
     // Spike: signal crosses avg from below to above
-    const isAbove = v > avg
     if(isAbove && wasBelow){
       if(suppressNextSpike){
-        suppressNextSpike = false  // skip this one only, next ones are fine
+        suppressNextSpike = false  // skip this one, never had genuine dip
+        consecutiveBelowCount = 0
       } else {
         isSpike = true
         spikes.push({i, t: times[i], y: v})
