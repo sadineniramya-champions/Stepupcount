@@ -126,7 +126,7 @@ button{font-family:inherit;cursor:pointer}
 const CDN   = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14"
 const MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
 const SMOOTH     = 0.15
-const RESET_FRAMES = 30   // recalibrate every 30 frames after a boundary hit
+const RESET_FRAMES = 30
 
 const vid        = document.getElementById("vid")
 const cv         = document.getElementById("cv")
@@ -192,9 +192,10 @@ function analyseSignal(signal){
       // If avg flipped from below current y to above current y,
       // mark as already-above so the immediate next crossing is skipped
       const v = vals[i]
+      // If avg jumped UP past current y (was above old avg, now below new avg)
+      // → force wasBelow=true so the immediate next upward crossing is skipped
       if(v > prevAvg && v < avg){
-        // Was above old avg, now below new avg → suppress next spike
-        wasBelow = false
+        wasBelow = true
       }
       // Otherwise carry wasBelow naturally
     }
