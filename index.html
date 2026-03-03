@@ -184,11 +184,11 @@ function analyseSignal(signal){
   let wasBelow = vals[0] < avg
 
   for(let i=0; i<vals.length; i++){
-    // Recalibrate at the START of every 30-frame window
+    // Recalibrate at the START of every 20-frame window
     if(i % RESET_FRAMES === 0){
       const newCal = calibrate(i, RESET_FRAMES)
       if(newCal){ absLow=newCal.lo; absHigh=newCal.hi; avg=newCal.av }
-      wasBelow = vals[i] < avg
+      // Do NOT reset wasBelow here — carry it over so crossings aren't missed
     }
 
     const v = vals[i]
