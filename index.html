@@ -184,6 +184,7 @@ function analyseSignal(signal){
   let wasBelow = vals[0] < avg
   let suppressNextSpike = false
   let consecutiveBelowCount = 0
+  let upCount=0, downCount=0, lastSpikeIdx=-1
 
   for(let i=0; i<vals.length; i++){
     // Recalibrate every 30 frames
@@ -225,8 +226,14 @@ function analyseSignal(signal){
         suppressNextSpike = false  // skip this one, never had genuine dip
         consecutiveBelowCount = 0
       } else {
-        isSpike = true
-        spikes.push({i, t: times[i], y: v})
+        // At least 5 up and 5 down frames since last spike → genuine
+        if(lastSpikeIdx < 0 || (upCount >= 5 && downCount >= 5)){
+          isSpike = true
+          spikes.push({i, t: times[i], y: v})
+          lastSpikeIdx = i
+          upCount = 0
+          downCount = 0
+        }
       }
     }
     wasBelow = !isAbove
