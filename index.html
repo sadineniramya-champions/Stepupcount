@@ -185,6 +185,8 @@ function analyseSignal(signal){
   let suppressNextSpike = false
   let consecutiveBelowCount = 0
   let upCount=0, downCount=0, lastSpikeIdx=-1
+  let spikeFrameGaps=[]   // gaps between consecutive spikes in frames
+  let minUpDown=5          // default until 5 spikes detected
 
   for(let i=0; i<vals.length; i++){
     // Recalibrate every 30 frames
@@ -226,10 +228,23 @@ function analyseSignal(signal){
         suppressNextSpike = false  // skip this one, never had genuine dip
         consecutiveBelowCount = 0
       } else {
-        // At least 5 up and 5 down frames since last spike → genuine
-        if(lastSpikeIdx < 0 || (upCount >= 5 && downCount >= 5)){
+        // 3 conditions — all must pass for genuine spike:
+        // 1. upCount   >= avgGap/4
+        // 2. downCount >= avgGap/4
+        // 3. total     >= avgGap/2
+        const minUp = minUpDown
+        const minDown = minUpDown
+        const minTotal = minUpDown * 2
+        if(lastSpikeIdx < 0 || (upCount >= minUp && downCount >= minDown && (upCount+downCount) >= minTotal)){
           isSpike = true
           spikes.push({i, t: times[i], y: v})
+          if(lastSpikeIdx >= 0){
+            spikeFrameGaps.push(i - lastSpikeIdx)
+            if(spikes.length >= 5){
+              const avgGap = spikeFrameGaps.reduce((a,b)=>a+b,0) / spikeFrameGaps.length
+              minUpDown = Math.max(2, Math.round(avgGap / 4))
+            }
+          }
           lastSpikeIdx = i
           upCount = 0
           downCount = 0
